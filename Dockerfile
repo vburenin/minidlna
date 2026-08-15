@@ -1,8 +1,8 @@
 # Build MiniDLNA 1.3.3 from the in-tree source (Kodi dc:date, exclude_dir,
-# junk/incomplete skips). Ubuntu 24.04 is FFmpeg 6.x; src/libav.h also
-# builds against FFmpeg 7 (ch_layout).
+# junk/incomplete skips). Ubuntu 26.04 ships FFmpeg 8; src/libav.h uses
+# ch_layout so it also covers FFmpeg 7.
 
-FROM ubuntu:24.04 AS build
+FROM ubuntu:26.04 AS build
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -33,23 +33,23 @@ RUN ./configure --prefix=/usr --sysconfdir=/etc \
     && make -j"$(nproc)" \
     && make install DESTDIR=/out
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=America/Los_Angeles
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libavformat60 \
-        libavutil58 \
-        libavcodec60 \
-        libswresample4 \
+        libavformat62 \
+        libavutil60 \
+        libavcodec62 \
+        libswresample6 \
         libjpeg8 \
         libsqlite3-0 \
         libexif12 \
         libid3tag0 \
         libogg0 \
         libvorbis0a \
-        libflac12t64 \
+        libflac14 \
         zlib1g \
         tzdata \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \

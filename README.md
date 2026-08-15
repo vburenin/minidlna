@@ -51,8 +51,8 @@ Junk folders that NAS and desktop systems drop into a media tree
 download suffixes (`.part`, `.!qB`, `.crdownload`, …) are skipped
 automatically. You do not need an `exclude_dir` line for those.
 
-The tree also builds against FFmpeg 7 (`ch_layout`) as well as the
-FFmpeg 6 stack on Ubuntu 24.04.
+The Docker image is Ubuntu 26.04 with FFmpeg 8. `src/libav.h` uses
+`ch_layout`, so the same source also builds on FFmpeg 6 and 7.
 
 ## Layout
 
@@ -91,9 +91,9 @@ curl -sI http://127.0.0.1:8200/ | head
 ## Building without Docker
 
 Same dependencies as upstream 1.3.3 (libavformat, sqlite3, libexif,
-libid3tag, libjpeg, libogg, libvorbis, libflac). On Ubuntu 24.04 this
-is FFmpeg 6.x; `src/libav.h` already guards `av_register_all()` for
-libavformat ≥ 58.
+libid3tag, libjpeg, libogg, libvorbis, libflac). The container uses
+Ubuntu 26.04 / FFmpeg 8. `src/libav.h` already guards `av_register_all()`
+for libavformat ≥ 58 and uses `ch_layout` for FFmpeg 7+.
 
 ```bash
 cd src
