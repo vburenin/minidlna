@@ -27,5 +27,7 @@ exec docker run --rm \
 		./autogen.sh
 		./configure --prefix=/usr --sysconfdir=/etc --enable-thumbnail
 		make -j"$(nproc)"
+		cc -O2 -Wall -Wextra -I. -o /tmp/test_improvements test_improvements.c
+		/tmp/test_improvements
 		echo "=== OK $av ==="
 	'

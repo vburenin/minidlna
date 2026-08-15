@@ -66,8 +66,9 @@ char create_albumArtTable_sqlite[] = "CREATE TABLE ALBUM_ART ("
 					");";
 
 char create_captionTable_sqlite[] = "CREATE TABLE CAPTIONS ("
-					"ID INTEGER PRIMARY KEY, "
-					"PATH TEXT NOT NULL"
+					"ID INTEGER NOT NULL, "
+					"PATH TEXT NOT NULL, "
+					"PRIMARY KEY (ID, PATH)"
 					");";
 
 char create_bookmarkTable_sqlite[] = "CREATE TABLE BOOKMARKS ("

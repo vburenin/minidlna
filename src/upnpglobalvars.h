@@ -66,7 +66,7 @@
 #endif
 
 #define USE_FORK 1
-#define DB_VERSION 12
+#define DB_VERSION 13
 
 #ifdef READYNAS
 # define LOGFILE_NAME "upnp-av.log"
@@ -248,6 +248,7 @@ extern char db_path[1024];
 extern char log_path[1024];
 extern struct media_dir_s *media_dirs;
 extern struct exclude_dir_s *exclude_dirs;
+extern struct exclude_file_s *exclude_files;
 extern struct album_art_name_s *album_art_names;
 extern volatile short int quitting;
 extern volatile uint32_t updateID;

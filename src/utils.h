@@ -89,11 +89,15 @@ int is_audio(const char * file);
 int is_image(const char * file);
 int is_playlist(const char * file);
 int is_caption(const char * file);
+const char *caption_ext(const char *file);
+const char *caption_http_mime(const char *file);
 #define is_nfo(file) ends_with(file, ".nfo")
 media_types get_media_type(const char *file);
 media_types valid_media_types(const char *path);
 int is_excluded_path(const char *path);
 int should_skip_path(const char *path);
+int match_path_glob(const char *pat, const char *name);
+int caption_matches_video(const char *video_path, const char *caption_path);
 
 int is_album_art(const char * name);
 int resolve_unknown_type(const char * path, media_types dir_type);

@@ -107,8 +107,15 @@ directory and everything under it. A relative value matches
 as path components anywhere under a media_dir
 (e.g. exclude_dir=video/incomplete).
 NAS junk folders (@eaDir, #recycle, lost+found, $RECYCLE.BIN,
-and similar) and unfinished download suffixes (.part, .!qB,
-.crdownload, ...) are skipped automatically.
+sample, trailer, and similar) and unfinished download suffixes
+(.part, .!qB, .crdownload, ...) are skipped automatically.
+Files named like *-sample.* / *-trailer.* are also skipped.
+.fi
+
+.IP "\fBexclude_file\fP"
+.nf
+Basename glob to skip when scanning. May be given more than once.
+* and ? are supported (e.g. exclude_file=*-extra.*).
 .fi
 
 .IP "\fBpresentation_url\fP"
@@ -146,10 +153,11 @@ and names should be delimited with a forward slash ("/").
 Example
 album_art_names=Cover.jpg/cover.jpg/AlbumArtSmall.jpg/albumartsmall.jpg/AlbumArt.jpg
 /albumart.jpg/Album.jpg/album.jpg/Folder.jpg/folder.jpg/Thumb.jpg/thumb.jpg
-/poster.jpg/Poster.jpg
+/poster.jpg/Poster.jpg/poster.png/Poster.png
 
-File-specific Kodi names (Movie-poster.jpg, Movie-fanart.jpg) are
-also checked, without listing them here.
+File-specific Kodi names (Movie-poster.jpg / .png, Movie-fanart.jpg
+/ .png) are also checked, without listing them here. PNG posters
+are converted to JPEG for DLNA clients.
 
 .fi
 

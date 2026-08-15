@@ -90,6 +90,11 @@ struct exclude_dir_s {
 	struct exclude_dir_s *next;
 };
 
+struct exclude_file_s {
+	char *pattern;          /* basename glob (* and ?) */
+	struct exclude_file_s *next;
+};
+
 struct album_art_name_s {
 	char *name;             /* base path */
 	uint8_t wildcard;

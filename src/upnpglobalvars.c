@@ -85,6 +85,7 @@ char db_path[1024] = {'\0'};
 char log_path[1024] = {'\0'};
 struct media_dir_s * media_dirs = NULL;
 struct exclude_dir_s * exclude_dirs = NULL;
+struct exclude_file_s * exclude_files = NULL;
 struct album_art_name_s * album_art_names = NULL;
 volatile short int quitting = 0;
 volatile uint32_t updateID = 0;

@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <time.h>
 
 #include "config.h"
 
@@ -461,7 +462,17 @@ insert_file(const char *name, const char *path, const char *parentID, int object
 	int have_inode = (stat(path, &st) == 0 && S_ISREG(st.st_mode) && st.st_ino);
 
 	if (have_inode)
+	{
 		src_id = find_detail_by_inode((int64_t)st.st_dev, (int64_t)st.st_ino);
+		if (src_id)
+		{
+			int64_t src_ts = sql_get_int64_field(db,
+				"SELECT TIMESTAMP from DETAILS where ID = %lld", src_id);
+			time_t side = (mtype == TYPE_VIDEO) ? video_sidecar_mtime(path) : 0;
+			if (src_ts < (int64_t)st.st_mtime || src_ts < (int64_t)side)
+				src_id = 0;
+		}
+	}
 
 	if( mtype == TYPE_IMAGE && (types & TYPE_IMAGE) )
 	{
@@ -511,7 +522,10 @@ insert_file(const char *name, const char *path, const char *parentID, int object
 		return -1;
 	}
 	if (have_inode)
+	{
 		stamp_detail_inode(detailID, (int64_t)st.st_dev, (int64_t)st.st_ino);
+		sync_inode_aliases(detailID);
+	}
 
 	snprintf(objectID, sizeof(objectID), "%s%s$%X", BROWSEDIR_ID, parentID, object);
 	objname = strdup(name);
@@ -752,6 +766,17 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	enum file_types type;
 
 	DPRINTF(parent?E_INFO:E_WARN, L_SCANNER, _("Scanning %s\n"), dir);
+	{
+		char status[PATH_MAX];
+		FILE *sf;
+		snprintf(status, sizeof(status), "%s/scan.status", db_path);
+		sf = fopen(status, "w");
+		if (sf)
+		{
+			fprintf(sf, "%llu\n%s\n", fileno, dir);
+			fclose(sf);
+		}
+	}
 	switch( dir_types )
 	{
 		case ALL_MEDIA:
@@ -835,7 +860,21 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 		else if( type == TYPE_FILE && (access(full_path, R_OK) == 0) )
 		{
 			if( insert_file(name, full_path, THISORNUL(parent), i+startID, dir_types) == 0 )
+			{
 				fileno++;
+				if ((fileno % 25) == 0)
+				{
+					char status[PATH_MAX];
+					FILE *sf;
+					snprintf(status, sizeof(status), "%s/scan.status", db_path);
+					sf = fopen(status, "w");
+					if (sf)
+					{
+						fprintf(sf, "%llu\n%s\n", fileno, full_path);
+						fclose(sf);
+					}
+				}
+			}
 		}
 		free(name);
 		free(namelist[i]);
@@ -845,6 +884,11 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 	if( !parent )
 	{
 		DPRINTF(E_WARN, L_SCANNER, _("Scanning %s finished (%llu files)!\n"), dir, fileno);
+		{
+			char status[PATH_MAX];
+			snprintf(status, sizeof(status), "%s/scan.status", db_path);
+			unlink(status);
+		}
 	}
 }
 

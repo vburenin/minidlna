@@ -330,10 +330,10 @@ open_db(sqlite3 **sq3)
 		DPRINTF(E_FATAL, L_GENERAL, "ERROR: Failed to open sqlite database!  Exiting...\n");
 	if (sq3)
 		*sq3 = db;
-	sqlite3_busy_timeout(db, 5000);
+	sqlite3_busy_timeout(db, 10000);
 	sql_exec(db, "pragma page_size = 4096");
-	sql_exec(db, "pragma journal_mode = OFF");
-	sql_exec(db, "pragma synchronous = OFF;");
+	sql_exec(db, "pragma journal_mode = WAL");
+	sql_exec(db, "pragma synchronous = NORMAL;");
 	sql_exec(db, "pragma default_cache_size = 8192;");
 
 	return new_db;
@@ -557,6 +557,7 @@ init(int argc, char **argv)
 	char *log_level = NULL;
 	struct media_dir_s *media_dir;
 	struct exclude_dir_s *exclude_dir;
+	struct exclude_file_s *exclude_file;
 	int ifaces = 0;
 	media_types types;
 	uid_t uid = 0;
@@ -726,6 +727,33 @@ init(int argc, char **argv)
 				exclude_dirs = exclude_dir;
 			DPRINTF(E_WARN, L_GENERAL, "Excluding media path matching \"%s\"\n",
 				exclude_dir->path);
+			break;
+		case UPNPEXCLUDEFILE:
+			path = ary_options[i].value;
+			while (*path && isspace(*path))
+				path++;
+			if (!*path)
+				break;
+			exclude_file = calloc(1, sizeof(struct exclude_file_s));
+			if (!exclude_file)
+				break;
+			exclude_file->pattern = strdup(path);
+			if (!exclude_file->pattern)
+			{
+				free(exclude_file);
+				break;
+			}
+			if (exclude_files)
+			{
+				struct exclude_file_s *all_ex = exclude_files;
+				while (all_ex->next)
+					all_ex = all_ex->next;
+				all_ex->next = exclude_file;
+			}
+			else
+				exclude_files = exclude_file;
+			DPRINTF(E_WARN, L_GENERAL, "Excluding files matching \"%s\"\n",
+				exclude_file->pattern);
 			break;
 		case UPNPALBUMART_NAMES:
 			for (string = ary_options[i].value; (word = strtok(string, "/")); string = NULL)

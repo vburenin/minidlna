@@ -300,6 +300,21 @@ db_upgrade(sqlite3 *db)
 			return 11;
 		sql_exec(db, "CREATE INDEX IF NOT EXISTS IDX_DETAILS_INODE ON DETAILS(DEVICE, INODE)");
 	}
+	if (db_vers < 13)
+	{
+		DPRINTF(E_WARN, L_DB_SQL, "Updating DB version to v%d\n", 13);
+		ret = sql_exec(db,
+			"CREATE TABLE CAPTIONS_V13 ("
+			" ID INTEGER NOT NULL, PATH TEXT NOT NULL,"
+			" PRIMARY KEY (ID, PATH))");
+		if (ret != SQLITE_OK)
+			return 12;
+		sql_exec(db, "INSERT OR IGNORE INTO CAPTIONS_V13 SELECT ID, PATH FROM CAPTIONS");
+		sql_exec(db, "DROP TABLE CAPTIONS");
+		ret = sql_exec(db, "ALTER TABLE CAPTIONS_V13 RENAME TO CAPTIONS");
+		if (ret != SQLITE_OK)
+			return 12;
+	}
 	sql_exec(db, "PRAGMA user_version = %d", DB_VERSION);
 
 	return 0;

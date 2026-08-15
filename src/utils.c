@@ -34,6 +34,7 @@
 #include "minidlnatypes.h"
 #include "upnpglobalvars.h"
 #include "utils.h"
+#include "pathmatch.h"
 #include "log.h"
 
 int
@@ -438,7 +439,74 @@ is_playlist(const char * file)
 int
 is_caption(const char * file)
 {
-	return (ends_with(file, ".srt") || ends_with(file, ".smi"));
+	return caption_ext(file) != NULL;
+}
+
+const char *
+caption_ext(const char *file)
+{
+	static const char *exts[] = {
+		".srt", ".smi", ".ass", ".ssa", ".vtt", ".sub", NULL
+	};
+	int i;
+
+	if (!file)
+		return NULL;
+	for (i = 0; exts[i]; i++)
+	{
+		if (ends_with(file, exts[i]))
+			return exts[i] + 1;
+	}
+	return NULL;
+}
+
+const char *
+caption_http_mime(const char *file)
+{
+	const char *e = caption_ext(file);
+
+	if (!e)
+		return "smi/caption";
+	if (strcmp(e, "srt") == 0)
+		return "text/srt";
+	if (strcmp(e, "ass") == 0 || strcmp(e, "ssa") == 0)
+		return "text/x-ssa";
+	if (strcmp(e, "vtt") == 0)
+		return "text/vtt";
+	if (strcmp(e, "smi") == 0)
+		return "smi/caption";
+	if (strcmp(e, "sub") == 0)
+		return "text/plain";
+	return "smi/caption";
+}
+
+int
+match_path_glob(const char *pat, const char *name)
+{
+	return match_glob(pat, name);
+}
+
+int
+caption_matches_video(const char *video_path, const char *caption_path)
+{
+	char vbuf[PATH_MAX], cbuf[PATH_MAX];
+	char *vbase, *cbase, *p;
+
+	if (!video_path || !caption_path)
+		return 0;
+	strncpyt(vbuf, video_path, sizeof(vbuf));
+	strncpyt(cbuf, caption_path, sizeof(cbuf));
+	vbase = strrchr(vbuf, '/');
+	vbase = vbase ? vbase + 1 : vbuf;
+	cbase = strrchr(cbuf, '/');
+	cbase = cbase ? cbase + 1 : cbuf;
+	p = strrchr(vbase, '.');
+	if (p)
+		*p = '\0';
+	p = strrchr(cbase, '.');
+	if (p)
+		*p = '\0';
+	return caption_stem_matches(vbase, cbase);
 }
 
 media_types
@@ -559,6 +627,14 @@ static const char *junk_dir_names[] = {
 	NULL
 };
 
+/* Scene-release leftover dirs; keep case-sensitive so a movie folder
+ * named "Sample" is not skipped. */
+static const char *sample_dir_names[] = {
+	"sample",
+	"trailer",
+	NULL
+};
+
 /* Suffixes left by browsers and torrent clients on unfinished files. */
 static const char *incomplete_suffixes[] = {
 	".part",
@@ -575,7 +651,7 @@ static const char *incomplete_suffixes[] = {
 };
 
 static int
-path_has_component(const char *path, const char *name)
+path_has_component_n(const char *path, const char *name, int insensitive)
 {
 	size_t nlen;
 	const char *p, *slash;
@@ -593,11 +669,19 @@ path_has_component(const char *path, const char *name)
 			break;
 		slash = strchr(p, '/');
 		clen = slash ? (size_t)(slash - p) : strlen(p);
-		if (clen == nlen && strncasecmp(p, name, nlen) == 0)
+		if (clen == nlen &&
+		    (insensitive ? strncasecmp(p, name, nlen) == 0
+		                 : strncmp(p, name, nlen) == 0))
 			return 1;
 		p = slash ? slash : p + clen;
 	}
 	return 0;
+}
+
+static int
+path_has_component(const char *path, const char *name)
+{
+	return path_has_component_n(path, name, 1);
 }
 
 static int
@@ -608,6 +692,11 @@ is_junk_dir_path(const char *path)
 	for (i = 0; junk_dir_names[i]; i++)
 	{
 		if (path_has_component(path, junk_dir_names[i]))
+			return 1;
+	}
+	for (i = 0; sample_dir_names[i]; i++)
+	{
+		if (path_has_component_n(path, sample_dir_names[i], 0))
 			return 1;
 	}
 	/* .Trash-<uid> (GNOME/KDE) */
@@ -640,6 +729,26 @@ is_incomplete_file(const char *path)
 	for (i = 0; incomplete_suffixes[i]; i++)
 	{
 		if (ends_with(base, incomplete_suffixes[i]))
+			return 1;
+	}
+	return 0;
+}
+
+static int
+is_excluded_file(const char *path)
+{
+	struct exclude_file_s *ex;
+	const char *base;
+
+	if (!path || !exclude_files)
+		return 0;
+	base = strrchr(path, '/');
+	base = base ? base + 1 : path;
+	if (!*base)
+		return 0;
+	for (ex = exclude_files; ex; ex = ex->next)
+	{
+		if (ex->pattern && match_glob(ex->pattern, base))
 			return 1;
 	}
 	return 0;
@@ -703,6 +812,14 @@ should_skip_path(const char *path)
 		return 1;
 	if (is_incomplete_file(path))
 		return 1;
+	if (is_excluded_file(path))
+		return 1;
+	{
+		const char *base = strrchr(path, '/');
+		base = base ? base + 1 : path;
+		if (is_sample_filename(base))
+			return 1;
+	}
 	return 0;
 }
 

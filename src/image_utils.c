@@ -41,6 +41,7 @@
 
 #include "upnpreplyparse.h"
 #include "image_utils.h"
+#include "libav.h"
 #include "log.h"
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -571,6 +572,171 @@ image_new_from_jpeg(const char *path, int is_file, const uint8_t *buf, int size,
 		fclose(file);
 
 	return vimage;
+}
+
+static image_s *
+image_new_from_av(const char *path)
+{
+	AVFormatContext *ctx = NULL;
+	AVCodecContext *avctx = NULL;
+	const AVCodec *codec;
+	AVPacket *pkt = NULL;
+	AVFrame *frame = NULL;
+	image_s *im = NULL;
+	int vstream = -1, i, ret;
+	int x, y;
+
+	if (!path || lav_open(&ctx, path) != 0 || !ctx)
+		return NULL;
+	for (i = 0; i < (int)ctx->nb_streams; i++)
+	{
+		if (lav_codec_type(ctx->streams[i]) == AVMEDIA_TYPE_VIDEO)
+		{
+			vstream = i;
+			break;
+		}
+	}
+	if (vstream < 0)
+		goto done;
+#if USE_CODECPAR
+	codec = avcodec_find_decoder(ctx->streams[vstream]->codecpar->codec_id);
+	avctx = avcodec_alloc_context3(codec);
+	if (!codec || !avctx)
+		goto done;
+	if (avcodec_parameters_to_context(avctx, ctx->streams[vstream]->codecpar) < 0)
+		goto done;
+#else
+	codec = avcodec_find_decoder(ctx->streams[vstream]->codec->codec_id);
+	avctx = ctx->streams[vstream]->codec;
+	if (!codec || !avctx)
+		goto done;
+#endif
+	if (avcodec_open2(avctx, codec, NULL) < 0)
+		goto done;
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 12, 100)
+	pkt = av_packet_alloc();
+	frame = av_frame_alloc();
+#else
+	pkt = av_mallocz(sizeof(*pkt));
+	frame = avcodec_alloc_frame();
+	if (pkt)
+		av_init_packet(pkt);
+#endif
+	if (!pkt || !frame)
+		goto done;
+	while (av_read_frame(ctx, pkt) >= 0)
+	{
+		if (pkt->stream_index != vstream)
+		{
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 12, 100)
+			av_packet_unref(pkt);
+#else
+			av_free_packet(pkt);
+#endif
+			continue;
+		}
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 37, 100)
+		ret = avcodec_send_packet(avctx, pkt);
+		av_packet_unref(pkt);
+		if (ret < 0)
+			break;
+		ret = avcodec_receive_frame(avctx, frame);
+		if (ret == AVERROR(EAGAIN))
+			continue;
+		if (ret < 0)
+			break;
+#else
+		{
+			int got = 0;
+			ret = avcodec_decode_video2(avctx, frame, &got, pkt);
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 12, 100)
+			av_packet_unref(pkt);
+#else
+			av_free_packet(pkt);
+#endif
+			if (ret < 0 || !got)
+				continue;
+		}
+#endif
+		if (frame->width <= 0 || frame->height <= 0)
+			break;
+		im = image_new(frame->width, frame->height);
+		if (!im)
+			break;
+		for (y = 0; y < frame->height; y++)
+		{
+			uint8_t *row = frame->data[0] + y * frame->linesize[0];
+			for (x = 0; x < frame->width; x++)
+			{
+				uint8_t r = 0, g = 0, b = 0;
+				switch (frame->format)
+				{
+				case AV_PIX_FMT_RGB24:
+					r = row[x*3]; g = row[x*3+1]; b = row[x*3+2];
+					break;
+				case AV_PIX_FMT_BGR24:
+					b = row[x*3]; g = row[x*3+1]; r = row[x*3+2];
+					break;
+				case AV_PIX_FMT_RGBA:
+					r = row[x*4]; g = row[x*4+1]; b = row[x*4+2];
+					break;
+				case AV_PIX_FMT_BGRA:
+					b = row[x*4]; g = row[x*4+1]; r = row[x*4+2];
+					break;
+				case AV_PIX_FMT_GRAY8:
+					r = g = b = row[x];
+					break;
+				case AV_PIX_FMT_PAL8:
+					if (frame->data[1])
+					{
+						uint8_t *pal = frame->data[1] + row[x] * 4;
+						r = pal[0]; g = pal[1]; b = pal[2];
+					}
+					break;
+				default:
+					/* Unsupported planar/YUV: drop this frame. */
+					image_free(im);
+					im = NULL;
+					goto done;
+				}
+				im->buf[y * frame->width + x] = COL(r, g, b);
+			}
+		}
+		break;
+	}
+done:
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(57, 12, 100)
+	av_frame_free(&frame);
+	av_packet_free(&pkt);
+#else
+	if (frame)
+		av_free(frame);
+	if (pkt)
+		av_free(pkt);
+#endif
+#if USE_CODECPAR
+	if (avctx)
+		avcodec_free_context(&avctx);
+#else
+	if (avctx)
+		avcodec_close(avctx);
+#endif
+	if (ctx)
+		lav_close(ctx);
+	return im;
+}
+
+image_s *
+image_new_from_file(const char *path)
+{
+	image_s *im;
+
+	if (!path)
+		return NULL;
+	im = image_new_from_jpeg(path, 1, NULL, 0, 1, ROTATE_NONE);
+	if (im)
+		return im;
+	return image_new_from_av(path);
 }
 
 void

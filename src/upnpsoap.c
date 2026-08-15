@@ -1177,16 +1177,37 @@ callback(void *args, int argc, char **argv, char **azColName)
 				default:
 					if( passed_args->flags & FLAG_HAS_CAPTIONS )
 					{
-						if( passed_args->flags & FLAG_CAPTION_RES )
-							ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:text/srt:*\"&gt;"
-									     "http://%s:%d/Captions/%s.srt"
-									   "&lt;/res&gt;",
-									   lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
-						if( passed_args->filter & FILTER_SEC_CAPTION_INFO_EX )
-							ret = strcatf(str, "&lt;sec:CaptionInfoEx sec:type=\"srt\"&gt;"
-							                     "http://%s:%d/Captions/%s.srt"
-							                   "&lt;/sec:CaptionInfoEx&gt;",
-							                   lan_addr[passed_args->iface].str, runtime_vars.port, detailID);
+						char **caps = NULL;
+						int ncaps = 0, ci;
+						char *q = sqlite3_mprintf(
+							"SELECT PATH from CAPTIONS where ID = %s order by PATH",
+							detailID);
+						if (q)
+							sql_get_table(db, q, &caps, &ncaps, NULL);
+						sqlite3_free(q);
+						for (ci = 1; ci <= ncaps; ci++)
+						{
+							const char *cext = caption_ext(caps[ci]);
+							const char *cmime = caption_http_mime(caps[ci]);
+							if (!cext)
+								cext = "srt";
+							if( passed_args->flags & FLAG_CAPTION_RES )
+								ret = strcatf(str, "&lt;res protocolInfo=\"http-get:*:%s:*\"&gt;"
+										     "http://%s:%d/Captions/%s/%d.%s"
+										   "&lt;/res&gt;",
+										   cmime,
+										   lan_addr[passed_args->iface].str, runtime_vars.port,
+										   detailID, ci-1, cext);
+							if( passed_args->filter & FILTER_SEC_CAPTION_INFO_EX )
+								ret = strcatf(str, "&lt;sec:CaptionInfoEx sec:type=\"%s\"&gt;"
+								                     "http://%s:%d/Captions/%s/%d.%s"
+								                   "&lt;/sec:CaptionInfoEx&gt;",
+								                   cext,
+								                   lan_addr[passed_args->iface].str, runtime_vars.port,
+								                   detailID, ci-1, cext);
+						}
+						if (caps)
+							sqlite3_free_table(caps);
 					}
 					break;
 				}

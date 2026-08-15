@@ -114,6 +114,50 @@ GetValueFromNameValueList(struct NameValueParserData * pdata,
     return p;
 }
 
+char *
+GetJoinedValuesFromNameValueList(struct NameValueParserData * pdata,
+                                 const char * Name, const char * sep)
+{
+    struct NameValue * nv;
+    const char *vals[32];
+    int n = 0, i, len = 0, seplen;
+    char *out, *p;
+
+    if (!pdata || !Name)
+        return NULL;
+    if (!sep)
+        sep = " / ";
+    seplen = (int)strlen(sep);
+    for (nv = pdata->head.lh_first; nv != NULL; nv = nv->entries.le_next)
+    {
+        if (strcmp(nv->name, Name) == 0 && nv->value[0] && n < 32)
+            vals[n++] = nv->value;
+    }
+    if (n == 0)
+        return NULL;
+    for (i = 0; i < n; i++)
+        len += (int)strlen(vals[i]);
+    len += seplen * (n - 1) + 1;
+    out = malloc(len);
+    if (!out)
+        return NULL;
+    p = out;
+    /* LIST_INSERT_HEAD stores last-seen first; emit document order. */
+    for (i = n - 1; i >= 0; i--)
+    {
+        int l = (int)strlen(vals[i]);
+        memcpy(p, vals[i], l);
+        p += l;
+        if (i)
+        {
+            memcpy(p, sep, seplen);
+            p += seplen;
+        }
+    }
+    *p = '\0';
+    return out;
+}
+
 /* debug all-in-one function 
  * do parsing then display to stdout */
 #ifdef DEBUG

@@ -48,6 +48,10 @@ image_get_jpeg_resolution(const char * path, int * width, int * height);
 image_s *
 image_new_from_jpeg(const char *path, int is_file, const uint8_t *ptr, int size, int scale, int resize);
 
+/* JPEG first, then FFmpeg (PNG / WebP / etc.). */
+image_s *
+image_new_from_file(const char *path);
+
 image_s *
 image_resize(image_s * src_image, int32_t width, int32_t height);
 

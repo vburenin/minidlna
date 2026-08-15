@@ -617,8 +617,11 @@ static void
 SendResp_presentation(struct upnphttp * h)
 {
 	struct string_s str;
-	char body[4096];
-	int a, v, p, i;
+	char body[8192];
+	char scan_path[PATH_MAX];
+	unsigned long long scan_n = 0;
+	int a, v, p, i, inodes, thumbs, caps;
+	FILE *sf;
 
 	INIT_STR(str, body);
 
@@ -627,6 +630,32 @@ SendResp_presentation(struct upnphttp * h)
 	a = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'a*'");
 	v = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'v*'");
 	p = sql_get_int_field(db, "SELECT count(*) from DETAILS where MIME glob 'i*'");
+	inodes = sql_get_int_field(db,
+		"SELECT count(DISTINCT INODE) from DETAILS where MIME glob 'v*' and INODE IS NOT NULL and INODE != 0");
+	thumbs = sql_get_int_field(db,
+		"SELECT count(*) from DETAILS where MIME glob 'v*' and ALBUM_ART > 0");
+	caps = sql_get_int_field(db, "SELECT count(*) from CAPTIONS");
+	scan_path[0] = '\0';
+	{
+		char sfile[PATH_MAX];
+		snprintf(sfile, sizeof(sfile), "%s/scan.status", db_path);
+		sf = fopen(sfile, "r");
+		if (sf)
+		{
+			if (fscanf(sf, "%llu\n", &scan_n) == 1)
+			{
+				if (!fgets(scan_path, sizeof(scan_path), sf))
+					scan_path[0] = '\0';
+				else
+				{
+					size_t n = strlen(scan_path);
+					if (n && scan_path[n-1] == '\n')
+						scan_path[n-1] = '\0';
+				}
+			}
+			fclose(sf);
+		}
+	}
 	strcatf(&str,
 		"<HTML><HEAD><TITLE>" SERVER_NAME " " MINIDLNA_VERSION "</TITLE><meta http-equiv=\"refresh\" content=\"20\"></HEAD>"
 		"<BODY><div style=\"text-align: center\">"
@@ -637,12 +666,22 @@ SendResp_presentation(struct upnphttp * h)
 		"<table border=1 cellpadding=10>"
 		"<tr><td>Audio files</td><td>%d</td></tr>"
 		"<tr><td>Video files</td><td>%d</td></tr>"
+		"<tr><td>Video inodes</td><td>%d</td></tr>"
+		"<tr><td>Video with art</td><td>%d</td></tr>"
+		"<tr><td>Caption files</td><td>%d</td></tr>"
 		"<tr><td>Image files</td><td>%d</td></tr>"
-		"</table>", a, v, p);
+		"<tr><td>Database</td><td>v%d</td></tr>"
+		"</table>", a, v, inodes, thumbs, caps, p, DB_VERSION);
 
 	if (GETFLAG(SCANNING_MASK))
-		strcatf(&str,
-			"<br><i>* Media scan in progress</i><br>");
+	{
+		strcatf(&str, "<br><i>* Media scan in progress");
+		if (scan_n)
+			strcatf(&str, " (%llu files)", scan_n);
+		if (scan_path[0])
+			strcatf(&str, "<br>%s", scan_path);
+		strcatf(&str, "</i><br>");
+	}
 
 	strcatf(&str,
 		"<h3>Connected clients</h3>"
@@ -1556,21 +1595,29 @@ SendResp_caption(struct upnphttp * h, char * object)
 {
 	char header[512];
 	char *path;
+	char *end = NULL;
 	off_t size;
 	long long id;
-	int fd;
+	int fd, index = 0;
 	struct string_s str;
+	const char *cmime;
 
-	id = strtoll(object, NULL, 10);
+	id = strtoll(object, &end, 10);
+	if (end && *end == '/')
+		index = (int)strtol(end + 1, NULL, 10);
+	if (index < 0)
+		index = 0;
 
-	path = sql_get_text_field(db, "SELECT PATH from CAPTIONS where ID = %lld", id);
+	path = sql_get_text_field(db,
+		"SELECT PATH from CAPTIONS where ID = %lld order by PATH limit 1 offset %d",
+		id, index);
 	if( !path )
 	{
 		DPRINTF(E_WARN, L_HTTP, "CAPTION ID %s not found, responding ERROR 404\n", object);
 		Send404(h);
 		return;
 	}
-	DPRINTF(E_INFO, L_HTTP, "Serving caption ID: %lld [%s]\n", id, path);
+	DPRINTF(E_INFO, L_HTTP, "Serving caption ID: %lld/%d [%s]\n", id, index, path);
 
 	fd = _open_file(path);
 	if( fd < 0 ) {
@@ -1581,13 +1628,14 @@ SendResp_caption(struct upnphttp * h, char * object)
 			Send404(h);
 		return;
 	}
+	cmime = caption_http_mime(path);
 	sqlite3_free(path);
 	size = lseek(fd, 0, SEEK_END);
 	lseek(fd, 0, SEEK_SET);
 
 	INIT_STR(str, header);
 
-	start_dlna_header(&str, 200, "Interactive", "smi/caption");
+	start_dlna_header(&str, 200, "Interactive", cmime);
 	strcatf(&str, "Content-Length: %jd\r\n\r\n", (intmax_t)size);
 
 	if( send_data(h, str.data, str.off, MSG_MORE) == 0 )

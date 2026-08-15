@@ -55,6 +55,7 @@ static const struct {
 	{ UPNPFRIENDLYNAME, "friendly_name"},
 	{ UPNPMEDIADIR, "media_dir"},
 	{ UPNPEXCLUDEDIR, "exclude_dir"},
+	{ UPNPEXCLUDEFILE, "exclude_file"},
 	{ UPNPALBUMART_NAMES, "album_art_names"},
 	{ UPNPINOTIFY, "inotify" },
 	{ UPNPDBDIR, "db_dir" },
@@ -218,6 +219,19 @@ freeoptions(void)
 			free(last_exclude);
 		}
 		exclude_dirs = NULL;
+	}
+
+	{
+		struct exclude_file_s *exclude_file, *last_file;
+		exclude_file = exclude_files;
+		while (exclude_file)
+		{
+			free(exclude_file->pattern);
+			last_file = exclude_file;
+			exclude_file = exclude_file->next;
+			free(last_file);
+		}
+		exclude_files = NULL;
 	}
 
 	art_names = album_art_names;

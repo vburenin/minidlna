@@ -27,6 +27,8 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <fcntl.h>
+#include <dirent.h>
+#include <limits.h>
 
 #include <libexif/exif-loader.h>
 #include <jpeglib.h>
@@ -118,42 +120,65 @@ dlna_timestamp_is_present(const char *filename, int *raw_packet_size)
 void
 check_for_captions(const char *path, int64_t detailID)
 {
-	char file[MAXPATHLEN];
-	char *p;
-	int ret;
+	char dirbuf[MAXPATHLEN];
+	char cap[MAXPATHLEN];
+	char *dir, *slash;
+	DIR *dh;
+	struct dirent *dp;
+	int found = 0;
 
-	strncpyt(file, path, sizeof(file));
-	p = strip_ext(file);
-	if (!p)
+	if (!path)
 		return;
 
 	/* If we weren't given a detail ID, look for one. */
 	if (!detailID)
 	{
-		detailID = sql_get_int64_field(db, "SELECT ID from DETAILS where (PATH > '%q.' and PATH <= '%q.z')"
-						   " and MIME glob 'video/*' limit 1", file, file);
-		if (detailID <= 0)
-		{
-			//DPRINTF(E_MAXDEBUG, L_METADATA, "No file found for caption %s.\n", path);
+		char stem[MAXPATHLEN];
+		char *p;
+
+		strncpyt(stem, path, sizeof(stem));
+		p = strip_ext(stem);
+		if (!p)
 			return;
-		}
+		detailID = sql_get_int64_field(db, "SELECT ID from DETAILS where (PATH > '%q.' and PATH <= '%q.z')"
+						   " and MIME glob 'video/*' limit 1", stem, stem);
+		if (detailID <= 0)
+			return;
 	}
 
-	strcpy(p, ".srt");
-	ret = access(file, R_OK);
-	if (ret != 0)
-	{
-		strcpy(p, ".smi");
-		ret = access(file, R_OK);
-	}
+	sql_exec(db, "DELETE from CAPTIONS where ID = %lld", (long long)detailID);
 
-	if (ret == 0)
+	strncpyt(dirbuf, path, sizeof(dirbuf));
+	slash = strrchr(dirbuf, '/');
+	if (slash)
 	{
-		sql_exec(db, "INSERT OR REPLACE into CAPTIONS"
-		             " (ID, PATH) "
-		             "VALUES"
-		             " (%lld, %Q)", detailID, file);
+		*slash = '\0';
+		dir = dirbuf;
 	}
+	else
+		dir = ".";
+
+	dh = opendir(dir);
+	if (!dh)
+		return;
+	while ((dp = readdir(dh)) != NULL)
+	{
+		if (dp->d_name[0] == '.')
+			continue;
+		if (!is_caption(dp->d_name))
+			continue;
+		snprintf(cap, sizeof(cap), "%s/%s", dir, dp->d_name);
+		if (!caption_matches_video(path, cap))
+			continue;
+		if (access(cap, R_OK) != 0)
+			continue;
+		sql_exec(db, "INSERT OR IGNORE into CAPTIONS (ID, PATH) VALUES (%lld, %Q)",
+		         (long long)detailID, cap);
+		found++;
+	}
+	closedir(dh);
+	if (found)
+		DPRINTF(E_DEBUG, L_METADATA, "Found %d caption(s) for %s\n", found, path);
 }
 
 static void
@@ -176,15 +201,38 @@ nfo_set_date(metadata_t *m, const char *raw)
 	m->date = esc;
 }
 
+enum nfo_kind {
+	NFO_EPISODE = 0,
+	NFO_TVSHOW
+};
+
 static void
-parse_nfo(const char *path, metadata_t *m)
+nfo_set_escaped(char **dst, const char *raw)
+{
+	char *unesc, *esc;
+
+	if (!dst || !raw || !raw[0])
+		return;
+	unesc = unescape_tag(raw, 1);
+	if (!unesc)
+		return;
+	esc = escape_tag(unesc, 1);
+	free(unesc);
+	if (!esc)
+		return;
+	free(*dst);
+	*dst = esc;
+}
+
+static void
+parse_nfo_kind(const char *path, metadata_t *m, enum nfo_kind kind, char **showtitle_out)
 {
 	FILE *nfo;
 	char *buf;
 	struct NameValueParserData xml;
 	struct stat file;
 	size_t nread;
-	char *val, *val2;
+	char *val, *val2, *joined;
 
 	if (stat(path, &file) != 0 ||
 	    file.st_size > 65535)
@@ -204,72 +252,200 @@ parse_nfo(const char *path, metadata_t *m)
 	}
 	nread = fread(buf, 1, file.st_size, nfo);
 	fclose(nfo);
-	
+
 	ParseNameValue(buf, nread, &xml, 0);
 
-	//printf("\ttype: %s\n", GetValueFromNameValueList(&xml, "rootElement"));
 	val = GetValueFromNameValueList(&xml, "title");
-	if (val)
+	val2 = GetValueFromNameValueList(&xml, "episodetitle");
+	if (kind == NFO_TVSHOW)
 	{
-		char *esc_tag, *title;
-		val2 = GetValueFromNameValueList(&xml, "episodetitle");
+		if (val && showtitle_out && !*showtitle_out)
+			*showtitle_out = unescape_tag(val, 1);
+	}
+	else if (val)
+	{
+		char *show, *title, *esc_tag;
+		show = GetValueFromNameValueList(&xml, "showtitle");
 		if (val2)
 			xasprintf(&title, "%s - %s", val, val2);
+		else if (show && show[0])
+			xasprintf(&title, "%s - %s", show, val);
+		else if (showtitle_out && *showtitle_out)
+			xasprintf(&title, "%s - %s", *showtitle_out, val);
 		else
 			title = strdup(val);
 		esc_tag = unescape_tag(title, 1);
+		free(m->title);
 		m->title = escape_tag(esc_tag, 1);
 		free(esc_tag);
 		free(title);
 	}
 
 	val = GetValueFromNameValueList(&xml, "plot");
-	if (val)
+	if (val && (kind == NFO_EPISODE || !m->comment))
+		nfo_set_escaped(&m->comment, val);
+
+	if (kind == NFO_EPISODE)
 	{
-		char *esc_tag = unescape_tag(val, 1);
-		m->comment = escape_tag(esc_tag, 1);
-		free(esc_tag);
+		val = GetValueFromNameValueList(&xml, "premiered");
+		if (!val)
+			val = GetValueFromNameValueList(&xml, "aired");
+		if (!val)
+			val = GetValueFromNameValueList(&xml, "year");
+		if (!val)
+			val = GetValueFromNameValueList(&xml, "capturedate");
+		if (val)
+			nfo_set_date(m, val);
 	}
 
-	/* Kodi: premiered / aired / year. MiniDLNA: capturedate. */
-	val = GetValueFromNameValueList(&xml, "premiered");
-	if (!val)
-		val = GetValueFromNameValueList(&xml, "aired");
-	if (!val)
-		val = GetValueFromNameValueList(&xml, "year");
-	if (!val)
-		val = GetValueFromNameValueList(&xml, "capturedate");
-	if (val)
-		nfo_set_date(m, val);
-
-	val = GetValueFromNameValueList(&xml, "genre");
-	if (val)
+	joined = GetJoinedValuesFromNameValueList(&xml, "genre", " / ");
+	if (joined)
 	{
-		char *esc_tag = unescape_tag(val, 1);
-		free(m->genre);
-		m->genre = escape_tag(esc_tag, 1);
-		free(esc_tag);
+		if (kind == NFO_EPISODE || !m->genre)
+			nfo_set_escaped(&m->genre, joined);
+		free(joined);
 	}
 
 	val = GetValueFromNameValueList(&xml, "mime");
-	if (val)
+	if (val && kind == NFO_EPISODE)
+		nfo_set_escaped(&m->mime, val);
+
+	if (kind == NFO_EPISODE)
 	{
-		char *esc_tag = unescape_tag(val, 1);
-		free(m->mime);
-		m->mime = escape_tag(esc_tag, 1);
-		free(esc_tag);
+		val = GetValueFromNameValueList(&xml, "season");
+		if (val)
+			m->disc = atoi(val);
+		val = GetValueFromNameValueList(&xml, "episode");
+		if (val)
+			m->track = atoi(val);
 	}
 
-	val = GetValueFromNameValueList(&xml, "season");
-	if (val)
-		m->disc = atoi(val);
+	if (!m->creator)
+	{
+		joined = GetJoinedValuesFromNameValueList(&xml, "director", ", ");
+		if (!joined)
+			joined = GetJoinedValuesFromNameValueList(&xml, "credits", ", ");
+		if (joined)
+		{
+			nfo_set_escaped(&m->creator, joined);
+			free(joined);
+		}
+		else
+		{
+			val = GetValueFromNameValueList(&xml, "studio");
+			if (val)
+				nfo_set_escaped(&m->creator, val);
+		}
+	}
 
-	val = GetValueFromNameValueList(&xml, "episode");
-	if (val)
-		m->track = atoi(val);
+	if (!m->artist)
+	{
+		val = GetValueFromNameValueList(&xml, "studio");
+		if (!val)
+			val = GetValueFromNameValueList(&xml, "showtitle");
+		if (val)
+			nfo_set_escaped(&m->artist, val);
+		else if (showtitle_out && *showtitle_out)
+			nfo_set_escaped(&m->artist, *showtitle_out);
+	}
 
 	ClearNameValueList(&xml);
 	free(buf);
+}
+
+static void
+apply_tvshow_nfo(const char *videopath, metadata_t *m, char **showtitle)
+{
+	char cur[PATH_MAX], nfo[PATH_MAX];
+	int depth;
+
+	if (!videopath)
+		return;
+	strncpyt(cur, videopath, sizeof(cur));
+	for (depth = 0; depth < 4; depth++)
+	{
+		char *slash = strrchr(cur, '/');
+		if (!slash || slash == cur)
+			break;
+		*slash = '\0';
+		snprintf(nfo, sizeof(nfo), "%s/tvshow.nfo", cur);
+		if (access(nfo, R_OK) == 0)
+		{
+			parse_nfo_kind(nfo, m, NFO_TVSHOW, showtitle);
+			return;
+		}
+	}
+}
+
+static time_t
+newer_mtime(time_t cur, const char *path)
+{
+	struct stat st;
+
+	if (path && stat(path, &st) == 0 && st.st_mtime > cur)
+		return st.st_mtime;
+	return cur;
+}
+
+time_t
+video_sidecar_mtime(const char *path)
+{
+	char buf[PATH_MAX], dir[PATH_MAX], base[PATH_MAX];
+	char *slash, *ext;
+	time_t newest = 0;
+	int depth;
+
+	if (!path)
+		return 0;
+	strncpyt(buf, path, sizeof(buf));
+	ext = strrchr(buf, '.');
+	if (ext)
+		strcpy(ext + 1, "nfo");
+	newest = newer_mtime(newest, buf);
+
+	strncpyt(base, path, sizeof(base));
+	ext = strrchr(base, '.');
+	if (ext)
+		*ext = '\0';
+	snprintf(buf, sizeof(buf), "%s-poster.jpg", base);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s-poster.png", base);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s-fanart.jpg", base);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s-fanart.png", base);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s.jpg", base);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s.png", base);
+	newest = newer_mtime(newest, buf);
+
+	strncpyt(dir, path, sizeof(dir));
+	slash = strrchr(dir, '/');
+	if (slash)
+		*slash = '\0';
+	else
+		strcpy(dir, ".");
+	snprintf(buf, sizeof(buf), "%s/poster.jpg", dir);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s/poster.png", dir);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s/Poster.jpg", dir);
+	newest = newer_mtime(newest, buf);
+	snprintf(buf, sizeof(buf), "%s/Poster.png", dir);
+	newest = newer_mtime(newest, buf);
+
+	strncpyt(buf, path, sizeof(buf));
+	for (depth = 0; depth < 4; depth++)
+	{
+		slash = strrchr(buf, '/');
+		if (!slash || slash == buf)
+			break;
+		*slash = '\0';
+		snprintf(dir, sizeof(dir), "%s/tvshow.nfo", buf);
+		newest = newer_mtime(newest, dir);
+	}
+	return newest;
 }
 
 void
@@ -1538,13 +1714,25 @@ video_no_dlna:
 	}
 #endif
 
-	strcpy(nfo, path);
-	ext = strrchr(nfo, '.');
-	if( ext )
 	{
-		strcpy(ext+1, "nfo");
-		if( access(nfo, R_OK) == 0 )
-			parse_nfo(nfo, &m);
+		char *showtitle = NULL;
+
+		apply_tvshow_nfo(path, &m, &showtitle);
+		strcpy(nfo, path);
+		ext = strrchr(nfo, '.');
+		if( ext )
+		{
+			strcpy(ext+1, "nfo");
+			if( access(nfo, R_OK) == 0 )
+				parse_nfo_kind(nfo, &m, NFO_EPISODE, &showtitle);
+		}
+		if( showtitle && !m.title )
+		{
+			char *esc = unescape_tag(showtitle, 1);
+			m.title = escape_tag(esc, 1);
+			free(esc);
+		}
+		free(showtitle);
 	}
 
 	if( !m.mime )
@@ -1684,7 +1872,16 @@ clone_detail_for_path(int64_t src_id, const char *path,
 	DPRINTF(E_DEBUG, L_SCANNER, "Reused metadata for %s [inode %lld]\n",
 	        path, (long long)inode);
 	if (is_video(path))
+	{
 		check_for_captions(path, id);
+		if (sql_get_int_field(db, "SELECT count(*) from CAPTIONS where ID = %lld",
+		                      (long long)id) <= 0)
+		{
+			sql_exec(db, "INSERT OR IGNORE into CAPTIONS (ID, PATH) "
+			             "SELECT %lld, PATH from CAPTIONS where ID = %lld",
+			         (long long)id, (long long)src_id);
+		}
+	}
 	return id;
 }
 
@@ -1695,4 +1892,57 @@ stamp_detail_inode(int64_t id, int64_t device, int64_t inode)
 		return;
 	sql_exec(db, "UPDATE DETAILS set DEVICE = %lld, INODE = %lld where ID = %lld",
 	         device, inode, id);
+}
+
+void
+sync_inode_aliases(int64_t src_id)
+{
+	int64_t device, inode;
+	int others;
+
+	if (src_id <= 0)
+		return;
+	device = sql_get_int64_field(db, "SELECT DEVICE from DETAILS where ID = %lld",
+	                             (long long)src_id);
+	inode = sql_get_int64_field(db, "SELECT INODE from DETAILS where ID = %lld",
+	                            (long long)src_id);
+	if (!inode)
+		return;
+	others = sql_get_int_field(db,
+		"SELECT count(*) from DETAILS where DEVICE = %lld and INODE = %lld and ID != %lld",
+		(long long)device, (long long)inode, (long long)src_id);
+	if (others <= 0)
+		return;
+	sql_exec(db,
+		"UPDATE DETAILS SET "
+		" TITLE = (SELECT TITLE FROM DETAILS WHERE ID = %lld),"
+		" DURATION = (SELECT DURATION FROM DETAILS WHERE ID = %lld),"
+		" BITRATE = (SELECT BITRATE FROM DETAILS WHERE ID = %lld),"
+		" SAMPLERATE = (SELECT SAMPLERATE FROM DETAILS WHERE ID = %lld),"
+		" CREATOR = (SELECT CREATOR FROM DETAILS WHERE ID = %lld),"
+		" ARTIST = (SELECT ARTIST FROM DETAILS WHERE ID = %lld),"
+		" ALBUM = (SELECT ALBUM FROM DETAILS WHERE ID = %lld),"
+		" GENRE = (SELECT GENRE FROM DETAILS WHERE ID = %lld),"
+		" COMMENT = (SELECT COMMENT FROM DETAILS WHERE ID = %lld),"
+		" CHANNELS = (SELECT CHANNELS FROM DETAILS WHERE ID = %lld),"
+		" DISC = (SELECT DISC FROM DETAILS WHERE ID = %lld),"
+		" TRACK = (SELECT TRACK FROM DETAILS WHERE ID = %lld),"
+		" DATE = (SELECT DATE FROM DETAILS WHERE ID = %lld),"
+		" RESOLUTION = (SELECT RESOLUTION FROM DETAILS WHERE ID = %lld),"
+		" THUMBNAIL = (SELECT THUMBNAIL FROM DETAILS WHERE ID = %lld),"
+		" ALBUM_ART = (SELECT ALBUM_ART FROM DETAILS WHERE ID = %lld),"
+		" ROTATION = (SELECT ROTATION FROM DETAILS WHERE ID = %lld),"
+		" DLNA_PN = (SELECT DLNA_PN FROM DETAILS WHERE ID = %lld),"
+		" MIME = (SELECT MIME FROM DETAILS WHERE ID = %lld) "
+		"WHERE DEVICE = %lld AND INODE = %lld AND ID != %lld",
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id, (long long)src_id, (long long)src_id,
+		(long long)src_id,
+		(long long)device, (long long)inode, (long long)src_id);
+	DPRINTF(E_DEBUG, L_SCANNER, "Synced %d alias row(s) from detail %lld\n",
+	        others, (long long)src_id);
 }

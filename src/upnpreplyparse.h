@@ -63,6 +63,11 @@ char *
 GetValueFromNameValueList(struct NameValueParserData * pdata,
                           const char * Name);
 
+/* Join every matching element (caller frees). Document order. */
+char *
+GetJoinedValuesFromNameValueList(struct NameValueParserData * pdata,
+                                 const char * Name, const char * sep);
+
 /* GetValueFromNameValueListIgnoreNS() */
 char *
 GetValueFromNameValueListIgnoreNS(struct NameValueParserData * pdata,

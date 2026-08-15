@@ -128,7 +128,11 @@ monitor_add_watch(int fd, const char * path)
 	}
 	if( wd < 0 )
 	{
-		DPRINTF(E_ERROR, L_INOTIFY, "inotify_add_watch(%s) [%s]\n", path, strerror(errno));
+		DPRINTF(E_ERROR, L_INOTIFY, "inotify_add_watch(%s) [%s]%s\n",
+		        path, strerror(errno),
+		        errno == ENOSPC ?
+		        " — raise fs.inotify.max_user_watches (sysctl or /proc/sys/fs/inotify/max_user_watches)" :
+		        "");
 		return (errno);
 	}
 

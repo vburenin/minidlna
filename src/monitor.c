@@ -30,6 +30,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
+#include <strings.h>
+#include <limits.h>
 #include "libav.h"
 
 #include "upnpglobalvars.h"
@@ -120,6 +123,7 @@ monitor_remove_file(const char * path)
 			art_path = sql_get_text_field(db,
 				"SELECT PATH from ALBUM_ART where ID = %lld", art_id);
 		/* Now delete the actual objects */
+		sql_exec(db, "DELETE from CAPTIONS where ID = %lld", detailID);
 		sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
 	}
@@ -191,11 +195,43 @@ monitor_insert_file(const char *name, const char *path)
 		tbl = "PLAYLISTS";
 	else if (mtype == TYPE_NFO)
 	{
-		char *vpath = check_nfo(path);
-		if (!vpath)
-			return -1;
-		strncpyt(video, vpath, sizeof(video));
-		sqlite3_free(vpath);
+		const char *base = strrchr(path, '/');
+		base = base ? base + 1 : path;
+		if (strcasecmp(base, "tvshow.nfo") == 0)
+		{
+			char dir[PATH_MAX];
+			char *slash, **result, *q;
+			int rows = 0, i;
+
+			strncpyt(dir, path, sizeof(dir));
+			slash = strrchr(dir, '/');
+			if (slash)
+				*slash = '\0';
+			q = sqlite3_mprintf("SELECT PATH from DETAILS where PATH like '%q/%%'"
+			                    " and MIME glob 'video/*'", dir);
+			if (q && sql_get_table(db, q, &result, &rows, NULL) == SQLITE_OK)
+			{
+				for (i = 1; i <= rows; i++)
+				{
+					char *vname;
+					strncpyt(video, result[i], sizeof(video));
+					monitor_remove_file(video);
+					vname = strrchr(video, '/');
+					if (vname)
+						monitor_insert_file(vname + 1, video);
+				}
+				sqlite3_free_table(result);
+			}
+			sqlite3_free(q);
+			return 0;
+		}
+		{
+			char *vpath = check_nfo(path);
+			if (!vpath)
+				return -1;
+			strncpyt(video, vpath, sizeof(video));
+			sqlite3_free(vpath);
+		}
 		DPRINTF(E_DEBUG, L_INOTIFY, "Found modified nfo %s\n", video);
 		monitor_remove_file(video);
 		name = strrchr(video, '/');
@@ -226,9 +262,14 @@ monitor_insert_file(const char *name, const char *path)
 			path, (ts > st.st_mtime) ? "older" : "newer");
 		monitor_remove_file(path);
 	}
+	else if( (mtype & TYPE_VIDEO) && video_sidecar_mtime(path) > (time_t)ts )
+	{
+		DPRINTF(E_DEBUG, L_INOTIFY, "Sidecar newer than db for %s\n", path);
+		monitor_remove_file(path);
+	}
 	else
 	{
-		if( ts == st.st_mtime && !GETFLAG(RESCAN_MASK) )
+		if( !GETFLAG(RESCAN_MASK) )
 			DPRINTF(E_DEBUG, L_INOTIFY, "%s already exists\n", path);
 		return 0;
 	}

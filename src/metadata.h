@@ -24,6 +24,8 @@
 #ifndef __METADATA_H__
 #define __METADATA_H__
 
+#include <time.h>
+
 typedef struct metadata_s {
 	char *       title;
 	char *       artist;
@@ -87,6 +89,12 @@ ends_with(const char *haystack, const char *needle);
 
 void
 check_for_captions(const char *path, int64_t detailID);
+
+time_t
+video_sidecar_mtime(const char *path);
+
+void
+sync_inode_aliases(int64_t src_id);
 
 int64_t
 GetFolderMetadata(const char *name, const char *path, const char *artist, const char *genre, int64_t album_art);

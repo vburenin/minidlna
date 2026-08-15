@@ -41,6 +41,7 @@
 #include "sql.h"
 #include "utils.h"
 #include "image_utils.h"
+#include "metadata.h"
 #include "log.h"
 
 static int
@@ -115,14 +116,15 @@ update_if_album_art(const char *path)
 	strncpyt(fpath, path, sizeof(fpath));
 	match = basename(fpath);
 	/* Check if this file name matches a specific audio or video file */
-	if( ends_with(match, ".cover.jpg") )
-	{
-		ncmp = strlen(match)-10;
-	}
+	if( ends_with(match, ".cover.jpg") || ends_with(match, ".cover.png") )
+		ncmp = (int)strlen(match) - 10;
+	else if( ends_with(match, "-poster.jpg") || ends_with(match, "-poster.png") ||
+	         ends_with(match, "-fanart.jpg") || ends_with(match, "-fanart.png") )
+		ncmp = (int)strlen(match) - 11;
+	else if( strrchr(match, '.') )
+		ncmp = (int)(strrchr(match, '.') - match);
 	else
-	{
-		ncmp = strrchr(match, '.') - match;
-	}
+		ncmp = (int)strlen(match);
 	/* Check if this file name matches one of the default album art names */
 	album_art = is_album_art(match);
 
@@ -157,7 +159,13 @@ update_if_album_art(const char *path)
 			art_id = find_album_art(file, NULL, 0);
 			ret = sql_exec(db, "UPDATE DETAILS set ALBUM_ART = %lld where PATH = '%q' and ALBUM_ART != %lld", (long long)art_id, file, (long long)art_id);
 			if( ret == SQLITE_OK )
+			{
+				int64_t did = sql_get_int64_field(db,
+					"SELECT ID from DETAILS where PATH = '%q'", file);
+				if (did > 0)
+					sync_inode_aliases(did);
 				DPRINTF(E_DEBUG, L_METADATA, "Updated cover art for %s to %s\n", dp->d_name, path);
+			}
 			else
 				DPRINTF(E_WARN, L_METADATA, "Error setting %s as cover art for %s\n", match, dp->d_name);
 		}
@@ -291,16 +299,34 @@ check_for_album_file(const char *path)
 	dir = dirname(mypath);
 
 	/* First look for file-specific cover art */
-	snprintf(file, sizeof(file), "%s.cover.jpg", path);
-	ret = access(file, R_OK);
-	if( ret != 0 )
+	ret = -1;
 	{
-		strncpyt(file, path, sizeof(file));
-		p = strrchr(file, '.');
-		if( p )
+		static const char *sidecar[] = {
+			".cover.jpg", ".cover.png",
+			NULL
+		};
+		char base[MAXPATHLEN];
+		int s;
+
+		for (s = 0; sidecar[s] && ret != 0; s++)
 		{
-			strcpy(p, ".jpg");
+			snprintf(file, sizeof(file), "%s%s", path, sidecar[s]);
 			ret = access(file, R_OK);
+		}
+		if( ret != 0 )
+		{
+			strncpyt(file, path, sizeof(file));
+			p = strrchr(file, '.');
+			if( p )
+			{
+				strcpy(p, ".jpg");
+				ret = access(file, R_OK);
+				if( ret != 0 )
+				{
+					strcpy(p, ".png");
+					ret = access(file, R_OK);
+				}
+			}
 		}
 		if( ret != 0 )
 		{
@@ -309,25 +335,29 @@ check_for_album_file(const char *path)
 			{
 				memmove(p+2, p+1, file+MAXPATHLEN-p-2);
 				p[1] = '.';
+				/* file is now /dir/.Movie.png or .jpg; try both */
 				ret = access(file, R_OK);
 			}
 		}
-	}
-	/* Kodi sidecars: Movie-poster.jpg, Movie-fanart.jpg */
-	if( ret != 0 )
-	{
-		char base[MAXPATHLEN];
-
-		strncpyt(base, path, sizeof(base));
-		p = strrchr(base, '.');
-		if( p )
-			*p = '\0';
-		snprintf(file, sizeof(file), "%s-poster.jpg", base);
-		ret = access(file, R_OK);
+		/* Kodi sidecars: Movie-poster.jpg / .png, Movie-fanart.jpg / .png */
 		if( ret != 0 )
 		{
-			snprintf(file, sizeof(file), "%s-fanart.jpg", base);
-			ret = access(file, R_OK);
+			static const char *kodi[] = {
+				"-poster.jpg", "-poster.png",
+				"-fanart.jpg", "-fanart.png",
+				NULL
+			};
+			strncpyt(base, path, sizeof(base));
+			p = strrchr(base, '.');
+			if( p )
+				*p = '\0';
+			for (s = 0; kodi[s]; s++)
+			{
+				snprintf(file, sizeof(file), "%s%s", base, kodi[s]);
+				ret = access(file, R_OK);
+				if( ret == 0 )
+					break;
+			}
 		}
 	}
 	if( ret == 0 )
@@ -335,7 +365,7 @@ check_for_album_file(const char *path)
 		if( art_cache_exists(file, &art_file) )
 			goto existing_file;
 		free(art_file);
-		imsrc = image_new_from_jpeg(file, 1, NULL, 0, 1, ROTATE_NONE);
+		imsrc = image_new_from_file(file);
 		if( imsrc )
 			goto found_file;
 	}
@@ -352,7 +382,7 @@ existing_file:
 				return art_file;
 			}
 			free(art_file);
-			imsrc = image_new_from_jpeg(file, 1, NULL, 0, 1, ROTATE_NONE);
+			imsrc = image_new_from_file(file);
 			if( !imsrc )
 				continue;
 found_file:

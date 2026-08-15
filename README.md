@@ -21,8 +21,12 @@ compiled in CI against FFmpeg 6, 7, and 8.
   (`1999` → `1999-01-01`).
 - Sidecar Kodi `.nfo` wins when present: `<premiered>`, then `<aired>`,
   then `<year>`, then MiniDLNA `<capturedate>`.
-- NFO dates apply when the video or `.nfo` is scanned or touched. Soft
-  `-r` does not rewrite unchanged rows; use `-R` or edit the NFO.
+- Extra NFO fields: multiple `<genre>`, `<showtitle>`, `<studio>`,
+  `<director>` / `<credits>`, plus folder `tvshow.nfo` (title / plot /
+  genre / studio inherited by episodes).
+- NFO, poster, and `tvshow.nfo` mtimes count as a change. Soft `-r`
+  and inotify re-read those sidecars even when the video file is
+  unchanged. A full `-R` is not required for NFO edits.
 - Refresh or restart Kodi after deploy so it does not keep a cached DIDL.
 
 Stock MiniDLNA emitted `2024-03-15T14:30:00` (19 characters, no
@@ -41,14 +45,24 @@ timezone). Kodi rejects that, clears the date, and shows year **1905**.
 
 ```conf
 exclude_dir=video/incomplete
+#exclude_file=*-extra.*
 ```
+
+- `exclude_file=` skips a basename glob (`*` and `?`). Repeat the option.
+- Built-in skip, no config: lowercase `sample/` and `trailer/` folders,
+  plus files named `*-sample.*`, `*_sample.*`, `*-trailer.*`,
+  `sample.mkv`, and similar.
 
 ### Artwork
 
-- Kodi sidecars: `Movie-poster.jpg`, `Movie-fanart.jpg` next to
-  `Movie.mkv`, plus folder `poster.jpg` / `Poster.jpg`.
+- Kodi sidecars: `Movie-poster.jpg` / `.png`, `Movie-fanart.jpg` / `.png`
+  next to `Movie.mkv`, plus folder `poster.jpg` / `Poster.jpg` /
+  `poster.png`.
+- PNG (and other FFmpeg-readable stills) are converted to JPEG for
+  DLNA clients.
 - Optional video thumbnails (`libffmpegthumbnailer`): a frame is decoded
   only when there is no embedded or sidecar art.
+- Changing a poster updates every symlink alias of that inode.
 
 ```conf
 enable_thumbnail=yes
@@ -64,10 +78,29 @@ Default is off. The image is built with `--enable-thumbnail`.
 - Every path stays browseable (`genres/…` and `kids/Movies/…`).
 - Metadata, date, and album art are computed once per inode. Later
   aliases clone that row.
-- Deleting one path does not remove the others. The shared JPEG is
-  removed only when the last alias is gone.
-- Database v12. Rebuild (`-R` or a new `files.db`) to apply on an
-  existing cache.
+- Later NFO / poster / mtime updates rewrite every `DETAILS` row with
+  the same device+inode. Deleting one path does not remove the others.
+  The shared JPEG is removed only when the last alias is gone.
+- Database v12 added inode columns. v13 allows more than one caption
+  per video. Rebuild (`-R` or a new `files.db`) to apply inode reuse
+  on an existing cache; v13 upgrades in place.
+
+### Subtitles
+
+- `Movie.srt` / `.smi` plus `.ass`, `.ssa`, `.vtt`, `.sub`.
+- Language and flag suffixes: `Movie.en.srt`, `Movie.eng.forced.srt`,
+  `Movie.sdh.srt`.
+- Every matching file is stored and advertised (`/Captions/<id>/<n>.ext`).
+  Clients that only understand one subtitle still get the first file at
+  `/Captions/<id>.srt`.
+
+### Operations
+
+- SQLite WAL + `busy_timeout` 10s so browse and scan can overlap.
+- `/status` shows video inode / art / caption counts, database version,
+  and (while scanning) the current path.
+- `inotify_add_watch` ENOSPC logs how to raise
+  `fs.inotify.max_user_watches`.
 
 ### Debian 1.3.3 scanner fixes
 
