@@ -1,0 +1,21 @@
+name: compile
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ffmpeg:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ubuntu:24.04   # FFmpeg 6
+          - ubuntu:25.04   # FFmpeg 7
+          - ubuntu:26.04   # FFmpeg 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile against ${{ matrix.image }}
+        run: ./scripts/compile-in-image.sh ${{ matrix.image }}

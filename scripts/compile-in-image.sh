@@ -1,0 +1,29 @@
+#!/bin/bash
+# Compile src/ inside a distro image. Used by CI and the local matrix.
+set -euo pipefail
+
+image=${1:?usage: compile-in-image.sh <docker-image>}
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+exec docker run --rm \
+	-v "$root/src:/src:ro" \
+	-w /tmp \
+	"$image" \
+	bash -lc '
+		set -euo pipefail
+		export DEBIAN_FRONTEND=noninteractive
+		apt-get update -qq
+		apt-get install -y --no-install-recommends \
+			build-essential pkg-config gettext autoconf automake \
+			libavformat-dev libavutil-dev libavcodec-dev \
+			libjpeg-dev libsqlite3-dev libexif-dev libid3tag0-dev \
+			libogg-dev libvorbis-dev libflac-dev zlib1g-dev \
+			ca-certificates
+		av=$(apt-cache policy libavformat-dev | awk "/Candidate:/ {print \$2}")
+		echo "=== building against $av ==="
+		cp -a /src /tmp/src
+		cd /tmp/src
+		./configure --prefix=/usr --sysconfdir=/etc
+		make -j"$(nproc)"
+		echo "=== OK $av ==="
+	'
