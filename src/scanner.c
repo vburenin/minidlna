@@ -797,7 +797,11 @@ ScanDirectory(const char *dir, const char *parent, media_types dir_types)
 		{
 			type = resolve_unknown_type(full_path, dir_types);
 		}
-		if( (type == TYPE_DIR) && (access(full_path, R_OK|X_OK) == 0) )
+		if( is_excluded_path(full_path) )
+		{
+			DPRINTF(E_WARN, L_SCANNER, "Skipping excluded path %s\n", full_path);
+		}
+		else if( (type == TYPE_DIR) && (access(full_path, R_OK|X_OK) == 0) )
 		{
 			char *parent_id;
 			insert_directory(name, full_path, BROWSEDIR_ID, THISORNUL(parent), i+startID);
@@ -828,8 +832,8 @@ cb_orphans(void *args, int argc, char **argv, char **azColName)
 	const char *path = argv[0];
 	const char *mime = argv[1];
 
-	/* If we can't access the path, remove it */
-	if (access(path, R_OK) != 0)
+	/* Drop unreachable paths, and anything now covered by exclude_dir. */
+	if (access(path, R_OK) != 0 || is_excluded_path(path))
 	{
 		DPRINTF(E_DEBUG, L_SCANNER, "Removing %s [%s]\n", path, mime ? "file" : "dir");
 		if (mime)

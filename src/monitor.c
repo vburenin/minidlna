@@ -152,6 +152,9 @@ monitor_insert_file(const char *name, const char *path)
 	media_types mtype = get_media_type(path);
 	struct stat st;
 
+	if( is_excluded_path(path) )
+		return -1;
+
 	/* Is it cover art for another file? */
 	if (mtype == TYPE_IMAGE)
 		update_if_album_art(path);
@@ -299,6 +302,12 @@ monitor_insert_directory(int fd, char *name, const char * path)
 	enum file_types type = TYPE_UNKNOWN;
 	media_types dir_types;
 
+	if( is_excluded_path(path) )
+	{
+		DPRINTF(E_INFO, L_INOTIFY, "Skipping excluded directory %s\n", path);
+		return 0;
+	}
+
 	if( access(path, R_OK|X_OK) != 0 )
 	{
 		DPRINTF(E_WARN, L_INOTIFY, "Could not access %s [%s]\n", path, strerror(errno));
@@ -341,6 +350,11 @@ monitor_insert_directory(int fd, char *name, const char * path)
 			continue;
 		esc_name = escape_tag(e->d_name, 1);
 		snprintf(path_buf, sizeof(path_buf), "%s/%s", path, e->d_name);
+		if( is_excluded_path(path_buf) )
+		{
+			free(esc_name);
+			continue;
+		}
 		switch( e->d_type )
 		{
 			case DT_DIR:

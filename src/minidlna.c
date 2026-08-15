@@ -556,6 +556,7 @@ init(int argc, char **argv)
 	char log_str[75] = "general,artwork,database,inotify,scanner,metadata,http,ssdp,tivo=warn";
 	char *log_level = NULL;
 	struct media_dir_s *media_dir;
+	struct exclude_dir_s *exclude_dir;
 	int ifaces = 0;
 	media_types types;
 	uid_t uid = 0;
@@ -682,6 +683,45 @@ init(int argc, char **argv)
 			}
 			else
 				media_dirs = media_dir;
+			break;
+		case UPNPEXCLUDEDIR:
+			path = ary_options[i].value;
+			while (*path && isspace(*path))
+				path++;
+			if (!*path)
+				break;
+			/* Drop trailing slashes so prefix / fragment matching is exact. */
+			{
+				size_t elen = strlen(path);
+				while (elen > 1 && path[elen - 1] == '/')
+					path[--elen] = '\0';
+			}
+			if (path[0] == '/')
+			{
+				char *rp = realpath(path, buf);
+				if (rp)
+					path = rp;
+			}
+			exclude_dir = calloc(1, sizeof(struct exclude_dir_s));
+			if (!exclude_dir)
+				break;
+			exclude_dir->path = strdup(path);
+			if (!exclude_dir->path)
+			{
+				free(exclude_dir);
+				break;
+			}
+			if (exclude_dirs)
+			{
+				struct exclude_dir_s *all_ex = exclude_dirs;
+				while (all_ex->next)
+					all_ex = all_ex->next;
+				all_ex->next = exclude_dir;
+			}
+			else
+				exclude_dirs = exclude_dir;
+			DPRINTF(E_WARN, L_GENERAL, "Excluding media path matching \"%s\"\n",
+				exclude_dir->path);
 			break;
 		case UPNPALBUMART_NAMES:
 			for (string = ary_options[i].value; (word = strtok(string, "/")); string = NULL)

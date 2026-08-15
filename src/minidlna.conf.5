@@ -99,6 +99,15 @@ by using the following syntax:
 
 .fi
 
+.IP "\fBexclude_dir\fP"
+.nf
+Directory to skip when scanning and watching for new files.
+May be given more than once. An absolute path matches that
+directory and everything under it. A relative value matches
+as path components anywhere under a media_dir
+(e.g. exclude_dir=video/incomplete).
+.fi
+
 .IP "\fBpresentation_url\fP"
 .nf
 Default presentation url is http address on port 80

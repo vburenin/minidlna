@@ -52,6 +52,7 @@ static const struct {
 	{ UPNPMODEL_NUMBER, "model_number"},
 	{ UPNPFRIENDLYNAME, "friendly_name"},
 	{ UPNPMEDIADIR, "media_dir"},
+	{ UPNPEXCLUDEDIR, "exclude_dir"},
 	{ UPNPALBUMART_NAMES, "album_art_names"},
 	{ UPNPINOTIFY, "inotify" },
 	{ UPNPDBDIR, "db_dir" },
@@ -195,6 +196,20 @@ freeoptions(void)
 		last_path = media_path;
 		media_path = media_path->next;
 		free(last_path);
+	}
+	media_dirs = NULL;
+
+	{
+		struct exclude_dir_s *exclude_path, *last_exclude;
+		exclude_path = exclude_dirs;
+		while (exclude_path)
+		{
+			free(exclude_path->path);
+			last_exclude = exclude_path;
+			exclude_path = exclude_path->next;
+			free(last_exclude);
+		}
+		exclude_dirs = NULL;
 	}
 
 	art_names = album_art_names;

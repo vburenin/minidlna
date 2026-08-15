@@ -539,6 +539,53 @@ valid_media_types(const char *path)
 }
 
 /*
+ * exclude_dir=/abs/path  — skip that directory and everything under it.
+ * exclude_dir=video/incomplete — skip any path that contains that
+ * sequence as whole path components (so "incompleteness" does not match).
+ */
+int
+is_excluded_path(const char *path)
+{
+	struct exclude_dir_s *ex;
+	size_t plen, elen;
+	const char *p;
+
+	if (!path || !exclude_dirs)
+		return 0;
+
+	plen = strlen(path);
+	for (ex = exclude_dirs; ex; ex = ex->next)
+	{
+		if (!ex->path || !ex->path[0])
+			continue;
+		elen = strlen(ex->path);
+		if (ex->path[0] == '/')
+		{
+			if (plen < elen)
+				continue;
+			if (strncmp(path, ex->path, elen) != 0)
+				continue;
+			if (path[elen] == '\0' || path[elen] == '/')
+				return 1;
+			continue;
+		}
+		p = path;
+		while ((p = strstr(p, ex->path)) != NULL)
+		{
+			if (p != path && *(p - 1) != '/')
+			{
+				p += elen;
+				continue;
+			}
+			if (p[elen] == '\0' || p[elen] == '/')
+				return 1;
+			p += elen;
+		}
+	}
+	return 0;
+}
+
+/*
  * Kodi's Platinum NPT_DateTime FORMAT_W3C parser rejects
  * YYYY-MM-DDTHH:MM:SS (19 chars): seconds require a timezone, so the
  * string must be at least 20 chars (e.g. ...SSZ). A failed parse

@@ -81,6 +81,11 @@ struct media_dir_s {
  	struct media_dir_s *next;
 };
 
+struct exclude_dir_s {
+	char *path;             /* absolute prefix, or relative path fragment */
+	struct exclude_dir_s *next;
+};
+
 struct album_art_name_s {
 	char *name;             /* base path */
 	uint8_t wildcard;

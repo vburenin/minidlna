@@ -243,6 +243,7 @@ extern char friendly_name[];
 extern char db_path[1024];
 extern char log_path[1024];
 extern struct media_dir_s *media_dirs;
+extern struct exclude_dir_s *exclude_dirs;
 extern struct album_art_name_s *album_art_names;
 extern volatile short int quitting;
 extern volatile uint32_t updateID;
