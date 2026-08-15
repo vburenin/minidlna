@@ -539,6 +539,113 @@ valid_media_types(const char *path)
 }
 
 /*
+ * NAS / desktop junk that is never a media folder. Hidden names
+ * (leading '.') are already dropped by the scanner; these are not.
+ */
+static const char *junk_dir_names[] = {
+	"@eaDir",
+	"@Recycle",
+	"@Recently-Snapshot",
+	"@tmp",
+	"#recycle",
+	"#snapshot",
+	"$RECYCLE.BIN",
+	"System Volume Information",
+	"lost+found",
+	".AppleDouble",
+	".AppleDB",
+	".Spotlight-V100",
+	".Trash",
+	NULL
+};
+
+/* Suffixes left by browsers and torrent clients on unfinished files. */
+static const char *incomplete_suffixes[] = {
+	".part",
+	".partial",
+	".filepart",
+	".!qb",
+	".!ut",
+	".bc!",
+	".crdownload",
+	".aria2",
+	".download",
+	".tmp",
+	NULL
+};
+
+static int
+path_has_component(const char *path, const char *name)
+{
+	size_t nlen;
+	const char *p, *slash;
+	size_t clen;
+
+	if (!path || !name || !name[0])
+		return 0;
+	nlen = strlen(name);
+	p = path;
+	while (*p)
+	{
+		while (*p == '/')
+			p++;
+		if (!*p)
+			break;
+		slash = strchr(p, '/');
+		clen = slash ? (size_t)(slash - p) : strlen(p);
+		if (clen == nlen && strncasecmp(p, name, nlen) == 0)
+			return 1;
+		p = slash ? slash : p + clen;
+	}
+	return 0;
+}
+
+static int
+is_junk_dir_path(const char *path)
+{
+	int i;
+
+	for (i = 0; junk_dir_names[i]; i++)
+	{
+		if (path_has_component(path, junk_dir_names[i]))
+			return 1;
+	}
+	/* .Trash-<uid> (GNOME/KDE) */
+	{
+		const char *p = path;
+		while ((p = strstr(p, "/.Trash-")) != NULL)
+		{
+			p += 8;
+			if (*p && isdigit((unsigned char)*p))
+				return 1;
+		}
+		if (strncmp(path, ".Trash-", 7) == 0 && isdigit((unsigned char)path[7]))
+			return 1;
+	}
+	return 0;
+}
+
+static int
+is_incomplete_file(const char *path)
+{
+	const char *base;
+	int i;
+
+	if (!path || !path[0])
+		return 0;
+	base = strrchr(path, '/');
+	base = base ? base + 1 : path;
+	if (!*base)
+		return 0;
+	for (i = 0; incomplete_suffixes[i]; i++)
+	{
+		if (ends_with(base, incomplete_suffixes[i]))
+			return 1;
+	}
+	return 0;
+}
+
+/*
  * exclude_dir=/abs/path  — skip that directory and everything under it.
  * exclude_dir=video/incomplete — skip any path that contains that
  * sequence as whole path components (so "incompleteness" does not match).
@@ -582,6 +689,20 @@ is_excluded_path(const char *path)
 			p += elen;
 		}
 	}
+	return 0;
+}
+
+int
+should_skip_path(const char *path)
+{
+	if (!path || !path[0])
+		return 0;
+	if (is_excluded_path(path))
+		return 1;
+	if (is_junk_dir_path(path))
+		return 1;
+	if (is_incomplete_file(path))
+		return 1;
 	return 0;
 }
 

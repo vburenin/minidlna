@@ -1,5 +1,6 @@
-# Build MiniDLNA 1.3.3 from the in-tree source (includes the Kodi dc:date fix).
-# Ubuntu 24.04 matches the host package's FFmpeg 6.x stack.
+# Build MiniDLNA 1.3.3 from the in-tree source (Kodi dc:date, exclude_dir,
+# junk/incomplete skips). Ubuntu 24.04 is FFmpeg 6.x; src/libav.h also
+# builds against FFmpeg 7 (ch_layout).
 
 FROM ubuntu:24.04 AS build
 

@@ -189,7 +189,7 @@ inotify_create_watches(int fd)
 	sql_get_table(db, "SELECT PATH from DETAILS where MIME is NULL and PATH is not NULL", &result, &rows, NULL);
 	for( i=1; i <= rows; i++ )
 	{
-		if( is_excluded_path(result[i]) )
+		if( should_skip_path(result[i]) )
 			continue;
 		DPRINTF(E_DEBUG, L_INOTIFY, "Add watch to %s\n", result[i]);
 		monitor_add_watch(fd, result[i]);
@@ -330,7 +330,7 @@ inotify_thread(void *arg)
 				}
 				esc_name = modifyString(strdup(event->name), "&", "&amp;amp;", 0);
 				snprintf(path_buf, sizeof(path_buf), "%s/%s", get_path_from_wd(event->wd), event->name);
-				if ( is_excluded_path(path_buf) &&
+				if ( should_skip_path(path_buf) &&
 				     !(event->mask & (IN_DELETE|IN_MOVED_FROM)) )
 				{
 					DPRINTF(E_DEBUG, L_INOTIFY, "Ignoring excluded path %s\n", path_buf);

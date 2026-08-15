@@ -106,6 +106,9 @@ May be given more than once. An absolute path matches that
 directory and everything under it. A relative value matches
 as path components anywhere under a media_dir
 (e.g. exclude_dir=video/incomplete).
+NAS junk folders (@eaDir, #recycle, lost+found, $RECYCLE.BIN,
+and similar) and unfinished download suffixes (.part, .!qB,
+.crdownload, ...) are skipped automatically.
 .fi
 
 .IP "\fBpresentation_url\fP"

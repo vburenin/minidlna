@@ -174,7 +174,15 @@ lav_get_interlaced(AVStream *s)
 #define lav_codec_tag(s) s->codecpar->codec_tag
 #define lav_sample_rate(s) s->codecpar->sample_rate
 #define lav_bit_rate(s) s->codecpar->bit_rate
+/* FFmpeg 5.1+ / 7: channels moved to ch_layout.nb_channels */
+#ifndef AV_VERSION_INT
+#define AV_VERSION_INT(a, b, c) ((a)<<16 | (b)<<8 | (c))
+#endif
+#if defined(LIBAVUTIL_VERSION_INT) && LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 28, 100)
+#define lav_channels(s) s->codecpar->ch_layout.nb_channels
+#else
 #define lav_channels(s) s->codecpar->channels
+#endif
 #define lav_width(s) s->codecpar->width
 #define lav_height(s) s->codecpar->height
 #define lav_profile(s) s->codecpar->profile

@@ -152,7 +152,7 @@ monitor_insert_file(const char *name, const char *path)
 	media_types mtype = get_media_type(path);
 	struct stat st;
 
-	if( is_excluded_path(path) )
+	if( should_skip_path(path) )
 		return -1;
 
 	/* Is it cover art for another file? */
@@ -302,7 +302,7 @@ monitor_insert_directory(int fd, char *name, const char * path)
 	enum file_types type = TYPE_UNKNOWN;
 	media_types dir_types;
 
-	if( is_excluded_path(path) )
+	if( should_skip_path(path) )
 	{
 		DPRINTF(E_INFO, L_INOTIFY, "Skipping excluded directory %s\n", path);
 		return 0;
@@ -350,7 +350,7 @@ monitor_insert_directory(int fd, char *name, const char * path)
 			continue;
 		esc_name = escape_tag(e->d_name, 1);
 		snprintf(path_buf, sizeof(path_buf), "%s/%s", path, e->d_name);
-		if( is_excluded_path(path_buf) )
+		if( should_skip_path(path_buf) )
 		{
 			free(esc_name);
 			continue;

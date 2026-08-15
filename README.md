@@ -46,6 +46,14 @@ exclude_dir=video/incomplete
 - The scanner and inotify both honor the list. A soft rescan (`-r`)
   drops previously indexed files that now match.
 
+Junk folders that NAS and desktop systems drop into a media tree
+(`@eaDir`, `#recycle`, `lost+found`, `$RECYCLE.BIN`, …) and unfinished
+download suffixes (`.part`, `.!qB`, `.crdownload`, …) are skipped
+automatically. You do not need an `exclude_dir` line for those.
+
+The tree also builds against FFmpeg 7 (`ch_layout`) as well as the
+FFmpeg 6 stack on Ubuntu 24.04.
+
 ## Layout
 
 | Path | What |
