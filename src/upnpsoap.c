@@ -1022,7 +1022,10 @@ callback(void *args, int argc, char **argv, char **azColName)
 			ret = strcatf(str, "&lt;dc:creator&gt;%s&lt;/dc:creator&gt;", creator);
 		}
 		if( date && (passed_args->filter & FILTER_DC_DATE) ) {
-			ret = strcatf(str, "&lt;dc:date&gt;%s&lt;/dc:date&gt;", date);
+			char w3c_date[32];
+			w3c_normalize_date(date, w3c_date, sizeof(w3c_date));
+			if( w3c_date[0] )
+				ret = strcatf(str, "&lt;dc:date&gt;%s&lt;/dc:date&gt;", w3c_date);
 		}
 		if( (passed_args->filter & FILTER_BOOKMARK_MASK) ) {
 			/* Get bookmark */

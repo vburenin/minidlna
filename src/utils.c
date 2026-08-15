@@ -21,6 +21,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -535,6 +536,73 @@ valid_media_types(const char *path)
 	}
 
 	return ALL_MEDIA;
+}
+
+/*
+ * Kodi's Platinum NPT_DateTime FORMAT_W3C parser rejects
+ * YYYY-MM-DDTHH:MM:SS (19 chars): seconds require a timezone, so the
+ * string must be at least 20 chars (e.g. ...SSZ). A failed parse
+ * clears dc:date and Kodi shows year 1905/1906.
+ */
+int
+w3c_date_from_time(time_t t, char *buf, size_t buflen)
+{
+	struct tm *tm;
+
+	if( !buf || buflen < 21 )
+		return -1;
+	tm = gmtime(&t);
+	if( !tm || strftime(buf, buflen, "%Y-%m-%dT%H:%M:%SZ", tm) == 0 )
+	{
+		buf[0] = '\0';
+		return -1;
+	}
+	return 0;
+}
+
+void
+w3c_normalize_date(const char *date, char *buf, size_t buflen)
+{
+	size_t n;
+
+	if( !buf || buflen == 0 )
+		return;
+	buf[0] = '\0';
+	if( !date || !date[0] )
+		return;
+
+	n = strlen(date);
+
+	/* YYYY-MM-DDTHH:MM:SS (no timezone) */
+	if( n == 19 && date[4] == '-' && date[7] == '-' &&
+	    (date[10] == 'T' || date[10] == ' ') &&
+	    date[13] == ':' && date[16] == ':' )
+	{
+		if( buflen < 21 )
+			return;
+		memcpy(buf, date, 19);
+		buf[10] = 'T';
+		buf[19] = 'Z';
+		buf[20] = '\0';
+		return;
+	}
+
+	/* EXIF "YYYY:MM:DD HH:MM:SS" */
+	if( n == 19 && date[4] == ':' && date[7] == ':' &&
+	    date[10] == ' ' && date[13] == ':' && date[16] == ':' )
+	{
+		if( buflen < 21 )
+			return;
+		memcpy(buf, date, 19);
+		buf[4] = '-';
+		buf[7] = '-';
+		buf[10] = 'T';
+		buf[19] = 'Z';
+		buf[20] = '\0';
+		return;
+	}
+
+	strncpyt(buf, date, buflen);
 }
 
 /*

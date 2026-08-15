@@ -101,6 +101,10 @@ const char *mime_to_ext(const char * mime);
 int make_dir(char * path, mode_t mode);
 unsigned int DJBHash(uint8_t *data, int len);
 
+/* dc:date helpers for UPnP / Kodi (W3C datetime with timezone) */
+int w3c_date_from_time(time_t t, char *buf, size_t buflen);
+void w3c_normalize_date(const char *date, char *buf, size_t buflen);
+
 /* Timeval manipulations */
 void	timevaladd(struct timeval *t1, const struct timeval *t2);
 void	timevalsub(struct timeval *t1, const struct timeval *t2);

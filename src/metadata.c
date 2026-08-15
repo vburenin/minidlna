@@ -686,7 +686,6 @@ GetVideoMetadata(const char *path, const char *name)
 {
 	struct stat file;
 	int ret, i;
-	struct tm *modtime;
 	AVFormatContext *ctx = NULL;
 	AVStream *astream = NULL, *vstream = NULL;
 	int audio_stream = -1, video_stream = -1;
@@ -1552,9 +1551,12 @@ video_no_dlna:
 
 	if( !m.date )
 	{
-		m.date = malloc(20);
-		modtime = localtime(&file.st_mtime);
-		strftime(m.date, 20, "%FT%T", modtime);
+		m.date = malloc(21);
+		if( !m.date || w3c_date_from_time(file.st_mtime, m.date, 21) != 0 )
+		{
+			free(m.date);
+			m.date = NULL;
+		}
 	}
 
 	if( !m.title )
