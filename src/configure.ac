@@ -14,7 +14,7 @@
 # License along with MiniDLNA; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 # USA.
-AC_INIT(MiniDLNA,1.1.3,,minidlna)
+AC_INIT(MiniDLNA,1.3.3,,minidlna)
 #LT_INIT
 
 AC_CANONICAL_TARGET
@@ -643,6 +643,26 @@ AC_ARG_ENABLE(lto,
         ]
 )
 
+AC_MSG_CHECKING([whether to enable video thumbnail generation])
+AC_ARG_ENABLE(thumbnail,
+	[AS_HELP_STRING([--enable-thumbnail],[enable video thumbnail generation using libffmpegthumbnailer])],
+	[enable_thumbnail=$enableval],
+	[enable_thumbnail=no])
+LIBFFMPEGTHUMBNAILER_CFLAGS=""
+LIBFFMPEGTHUMBNAILER_LIBS=""
+if test "x$enable_thumbnail" = "xyes"; then
+	AC_MSG_RESULT([yes])
+	AC_CHECK_HEADER([libffmpegthumbnailer/videothumbnailerc.h], [],
+		[AC_MSG_ERROR([libffmpegthumbnailer headers not found])])
+	AC_CHECK_LIB([ffmpegthumbnailer], [video_thumbnailer_create],
+		[LIBFFMPEGTHUMBNAILER_LIBS="-lffmpegthumbnailer"],
+		[AC_MSG_ERROR([libffmpegthumbnailer not found])])
+	AC_DEFINE([THUMBNAIL_CREATION], [1], [Define to 1 to enable video thumbnail generation])
+else
+	AC_MSG_RESULT([no])
+fi
+AC_SUBST([LIBFFMPEGTHUMBNAILER_CFLAGS])
+AC_SUBST([LIBFFMPEGTHUMBNAILER_LIBS])
 
 case "$target_os" in
 	darwin*)

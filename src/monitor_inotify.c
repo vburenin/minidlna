@@ -267,6 +267,10 @@ inotify_thread(void *arg)
 	char * esc_name = NULL;
 	struct stat st;
 	sigset_t set;
+#ifdef THUMBNAIL_CREATION
+	char renpath_buf[PATH_MAX];
+	int cookie = 0;
+#endif
 
 	sigfillset(&set);
 	sigdelset(&set, SIGCHLD);
@@ -342,6 +346,15 @@ inotify_thread(void *arg)
 				{
 					DPRINTF(E_DEBUG, L_INOTIFY,  "The directory %s was %s.\n",
 						path_buf, (event->mask & IN_MOVED_TO ? "moved here" : "created"));
+#ifdef THUMBNAIL_CREATION
+					if (cookie && event->cookie == cookie && (event->mask & IN_MOVED_TO))
+					{
+						DPRINTF(E_DEBUG, L_INOTIFY, "Directory rename: %s -> %s\n",
+							renpath_buf, path_buf);
+						rename_artcache_dir(renpath_buf, path_buf);
+						cookie = 0;
+					}
+#endif
 					monitor_insert_directory(pollfds[0].fd, esc_name, path_buf);
 				}
 				else if ( (event->mask & (IN_CLOSE_WRITE|IN_MOVED_TO|IN_CREATE)) &&
@@ -374,7 +387,16 @@ inotify_thread(void *arg)
 						(event->mask & IN_ISDIR ? "directory" : "file"),
 						path_buf, (event->mask & IN_MOVED_FROM ? "moved away" : "deleted"));
 					if ( event->mask & IN_ISDIR )
+					{
+#ifdef THUMBNAIL_CREATION
+						if (event->mask & IN_MOVED_FROM)
+						{
+							strncpyt(renpath_buf, path_buf, sizeof(renpath_buf));
+							cookie = event->cookie;
+						}
+#endif
 						monitor_remove_directory(pollfds[0].fd, path_buf);
+					}
 					else
 					{
 						monitor_remove_file(path_buf);

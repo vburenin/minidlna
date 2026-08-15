@@ -27,6 +27,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#include "config.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -69,6 +71,12 @@ static const struct {
 	{ WIDE_LINKS, "wide_links" },
 	{ TIVO_DISCOVERY, "tivo_discovery" },
 	{ ENABLE_SUBTITLES, "enable_subtitles" },
+#ifdef THUMBNAIL_CREATION
+	{ ENABLE_THUMB, "enable_thumbnail" },
+	{ THUMB_WIDTH, "thumbnail_width" },
+	{ THUMB_QUALITY, "thumbnail_quality" },
+	{ ENABLE_THUMB_FILMSTRIP, "enable_thumbnail_filmstrip" },
+#endif
 };
 
 int

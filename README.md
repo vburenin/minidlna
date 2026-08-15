@@ -59,6 +59,28 @@ These are skipped automatically, with no config line:
 - Unfinished download suffixes: `.part`, `.!qB`, `.!ut`, `.bc!`,
   `.crdownload`, `.aria2`, `.download`, `.tmp`
 
+### Video thumbnails
+
+The image is built with `--enable-thumbnail` (`libffmpegthumbnailer`).
+When no embedded art or sidecar `folder.jpg` / `*.cover.jpg` exists,
+the scanner can decode a frame and serve it as `upnp:albumArtURI`.
+
+```conf
+enable_thumbnail=yes
+#thumbnail_width=160
+#thumbnail_quality=8
+#enable_thumbnail_filmstrip=no
+```
+
+Default is off so a first scan does not decode every video. Turning it
+on walks files that still lack art and fills `art_cache`.
+
+Also from Debian 1.3.3:
+
+- compilation albums no longer spawn one container per artist on inotify
+- SIGHUP reopens the log without tearing down SSDP sockets
+- the non-fork scanner path closes SQLite after a scan
+
 ### FFmpeg 6 / 7 / 8
 
 `src/libav.h` uses `ch_layout.nb_channels` on libavutil ≥ 57.28, so the
@@ -116,12 +138,14 @@ prefer bind mounts over env vars. Do not commit either file.
 ## Building without Docker
 
 Same dependencies as upstream 1.3.3 (libavformat, sqlite3, libexif,
-libid3tag, libjpeg, libogg, libvorbis, libflac). `src/libav.h` already
+libid3tag, libjpeg, libogg, libvorbis, libflac). Add
+`libffmpegthumbnailer` for `--enable-thumbnail`. `src/libav.h` already
 guards `av_register_all()` for libavformat ≥ 58.
 
 ```bash
 cd src
-./configure --prefix=/usr --sysconfdir=/etc
+./autogen.sh
+./configure --prefix=/usr --sysconfdir=/etc --enable-thumbnail
 make -j"$(nproc)"
 ```
 

@@ -216,7 +216,6 @@ sighup(int sig)
 	signal(sig, sighup);
 	DPRINTF(E_WARN, L_GENERAL, "received signal %d, reloading\n", sig);
 
-	reload_ifaces(1);
 	log_reopen();
 }
 
@@ -432,6 +431,7 @@ rescan:
 			SETFLAG(SCANNING_MASK);
 #else
 		start_scanner();
+		sqlite3_close(db);
 #endif
 	}
 }
@@ -525,7 +525,7 @@ static void init_nls(void)
 	if (!messages)
 		messages = "unset";
 	locale_dir = bindtextdomain("minidlna", getenv("TEXTDOMAINDIR"));
-	DPRINTF(E_DEBUG, L_GENERAL, "Using locale dir '%s' and locale langauge %s/%s\n", locale_dir, messages, ctype);
+	DPRINTF(E_DEBUG, L_GENERAL, "Using locale dir '%s' and locale language %s/%s\n", locale_dir, messages, ctype);
 	textdomain("minidlna");
 #endif
 }
@@ -589,6 +589,10 @@ init(int argc, char **argv)
 	runtime_vars.max_connections = 50;
 	runtime_vars.root_container = NULL;
 	runtime_vars.ifaces[0] = NULL;
+#ifdef THUMBNAIL_CREATION
+	runtime_vars.thumb_width = 160;
+	runtime_vars.thumb_quality = 8;
+#endif
 
 	/* read options file first since
 	 * command line arguments have final say */
@@ -852,6 +856,30 @@ init(int argc, char **argv)
 			if (!strtobool(ary_options[i].value))
 				CLEARFLAG(SUBTITLES_MASK);
 			break;
+#ifdef THUMBNAIL_CREATION
+		case ENABLE_THUMB:
+			if (strtobool(ary_options[i].value))
+				SETFLAG(THUMB_MASK);
+			break;
+		case THUMB_WIDTH:
+			runtime_vars.thumb_width = atoi(ary_options[i].value);
+			if (runtime_vars.thumb_width < 120)
+				runtime_vars.thumb_width = 120;
+			if (runtime_vars.thumb_width > 480)
+				runtime_vars.thumb_width = 480;
+			break;
+		case THUMB_QUALITY:
+			runtime_vars.thumb_quality = atoi(ary_options[i].value);
+			if (runtime_vars.thumb_quality < 5)
+				runtime_vars.thumb_quality = 5;
+			if (runtime_vars.thumb_quality > 30)
+				runtime_vars.thumb_quality = 30;
+			break;
+		case ENABLE_THUMB_FILMSTRIP:
+			if (strtobool(ary_options[i].value))
+				SETFLAG(THUMB_FILMSTRIP);
+			break;
+#endif
 		default:
 			DPRINTF(E_ERROR, L_GENERAL, "Unknown option in file %s\n",
 				optionsfile);

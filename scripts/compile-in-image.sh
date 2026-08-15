@@ -14,16 +14,18 @@ exec docker run --rm \
 		export DEBIAN_FRONTEND=noninteractive
 		apt-get update -qq
 		apt-get install -y --no-install-recommends \
-			build-essential pkg-config gettext autoconf automake \
+			build-essential pkg-config gettext autopoint autoconf automake \
 			libavformat-dev libavutil-dev libavcodec-dev \
 			libjpeg-dev libsqlite3-dev libexif-dev libid3tag0-dev \
-			libogg-dev libvorbis-dev libflac-dev zlib1g-dev \
+			libogg-dev libvorbis-dev libflac-dev \
+			libffmpegthumbnailer-dev zlib1g-dev \
 			ca-certificates
 		av=$(apt-cache policy libavformat-dev | awk "/Candidate:/ {print \$2}")
 		echo "=== building against $av ==="
 		cp -a /src /tmp/src
 		cd /tmp/src
-		./configure --prefix=/usr --sysconfdir=/etc
+		./autogen.sh
+		./configure --prefix=/usr --sysconfdir=/etc --enable-thumbnail
 		make -j"$(nproc)"
 		echo "=== OK $av ==="
 	'

@@ -1,6 +1,6 @@
 # Build MiniDLNA 1.3.3 from the in-tree source (Kodi dc:date, exclude_dir,
-# junk/incomplete skips). Ubuntu 26.04 ships FFmpeg 8; src/libav.h uses
-# ch_layout so it also covers FFmpeg 7.
+# junk/incomplete skips, optional video thumbnails). Ubuntu 26.04 ships
+# FFmpeg 8; src/libav.h uses ch_layout so it also covers FFmpeg 7.
 
 FROM ubuntu:26.04 AS build
 
@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
         gettext \
+        autopoint \
         autoconf \
         automake \
         libavformat-dev \
@@ -22,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libogg-dev \
         libvorbis-dev \
         libflac-dev \
+        libffmpegthumbnailer-dev \
         zlib1g-dev \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -29,7 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 COPY src/ .
 
-RUN ./configure --prefix=/usr --sysconfdir=/etc \
+RUN ./autogen.sh \
+    && ./configure --prefix=/usr --sysconfdir=/etc --enable-thumbnail \
     && make -j"$(nproc)" \
     && make install DESTDIR=/out
 
@@ -51,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libogg0 \
         libvorbis0a \
         libflac14 \
+        libffmpegthumbnailer4v5 \
         zlib1g \
         tzdata \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \

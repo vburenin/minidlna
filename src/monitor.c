@@ -117,6 +117,11 @@ monitor_remove_file(const char * path)
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
 	}
 	snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s", db_path, path);
+#ifdef THUMBNAIL_CREATION
+	/* Generated thumbs live as art_cache/<path with last 4 chars -> .jpg> */
+	if (is_video(path) && strlen(art_cache) >= 4)
+		strcpy(strchr(art_cache, '\0') - 4, ".jpg");
+#endif
 	remove(art_cache);
 
 	return 0;

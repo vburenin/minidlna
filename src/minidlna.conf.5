@@ -191,6 +191,20 @@ By default, wide symlinks are not followed.
 Set to 'no' to disable subtitle support on unknown clients.
 By default, subtitles are enabled for unknown or generic clients.
 
+.IP "\fBenable_thumbnail\fP"
+Set to 'yes' to generate a JPEG thumbnail from video files when no
+embedded or sidecar artwork is found. Requires a build configured with
+\fB--enable-thumbnail\fP. Default is no.
+
+.IP "\fBthumbnail_width\fP"
+Width of generated video thumbnails, 120–480. Default is 160.
+
+.IP "\fBthumbnail_quality\fP"
+JPEG quality of generated video thumbnails, 5–30. Default is 8.
+
+.IP "\fBenable_thumbnail_filmstrip\fP"
+Set to 'yes' to overlay a film-strip on generated video thumbnails.
+
 
 
 .SH VERSION
