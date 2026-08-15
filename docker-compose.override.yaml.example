@@ -1,0 +1,12 @@
+# Copy this file to docker-compose.override.yaml and edit the host paths.
+# docker-compose.override.yaml is gitignored and merged automatically.
+services:
+  minidlna:
+    environment:
+      TZ: UTC
+    volumes:
+      - /path/to/your/videos:/storage/video:ro
+      - /path/to/minidlna-cache:/var/cache/minidlna
+      - /path/to/minidlna-log:/var/log/minidlna
+      # Optional: use a private daemon config instead of the image default
+      # - ./minidlna.local.conf:/etc/minidlna.conf:ro

@@ -1,0 +1,23 @@
+# MiniDLNA must use host networking so SSDP multicast (239.255.255.250:1900)
+# reaches LAN clients such as Kodi. Bridge/NAT will not advertise correctly.
+#
+# Copy docker-compose.override.yaml.example to docker-compose.override.yaml
+# and point the bind mounts at your media, cache, and log directories.
+# Compose merges the override automatically; do not commit it.
+services:
+  minidlna:
+    container_name: minidlna
+    build: .
+    image: minidlna:local
+    restart: always
+    network_mode: host
+    environment:
+      TZ: ${TZ:-UTC}
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    volumes:
+      - ${MINIDLNA_MEDIA:-./media}:/storage/video:ro
+      - ${MINIDLNA_CACHE:-./data/cache}:/var/cache/minidlna
+      - ${MINIDLNA_LOG:-./data/log}:/var/log/minidlna
+      - ${MINIDLNA_CONF:-./minidlna.conf}:/etc/minidlna.conf:ro
+      - /etc/localtime:/etc/localtime:ro

@@ -1,0 +1,6 @@
+src/autom4te.cache
+src/*.o
+src/minidlnad
+src/.git
+**/.git
+AGENTS.md

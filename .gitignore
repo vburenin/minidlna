@@ -18,3 +18,11 @@ src/po/*.1po
 *~
 *.swp
 .DS_Store
+
+# Host-specific — never publish
+AGENTS.md
+.env
+docker-compose.override.yaml
+minidlna.local.conf
+media/
+data/
