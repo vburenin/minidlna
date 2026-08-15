@@ -12,7 +12,7 @@ compiled in CI against FFmpeg 6, 7, and 8.
 
 ## What this fork changes
 
-### Kodi video dates show as 1905 / 1906
+### Kodi video dates show as 1905
 
 MiniDLNA stored video `dc:date` as a 19-character local timestamp:
 
@@ -24,7 +24,7 @@ Kodi’s Platinum / Neptune `FORMAT_W3C` parser accepts either `YYYY-MM-DD`
 (exactly 10 characters) or a datetime **with a timezone** (length ≥ 20,
 e.g. `…SSZ`). A 19-character `YYYY-MM-DDTHH:MM:SS` is rejected. Platinum
 then clears the date, and Kodi treats a leftover year as an OLE serial
-day count from 1899-12-30 — which lands in mid-1905 (sometimes 1906).
+day count from 1899-12-30 — which lands in mid-1905.
 
 This fork:
 

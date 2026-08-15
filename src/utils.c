@@ -710,7 +710,7 @@ should_skip_path(const char *path)
  * Kodi's Platinum NPT_DateTime FORMAT_W3C parser rejects
  * YYYY-MM-DDTHH:MM:SS (19 chars): seconds require a timezone, so the
  * string must be at least 20 chars (e.g. ...SSZ). A failed parse
- * clears dc:date and Kodi shows year 1905/1906.
+ * clears dc:date and Kodi shows year 1905.
  */
 int
 w3c_date_from_time(time_t t, char *buf, size_t buflen)
