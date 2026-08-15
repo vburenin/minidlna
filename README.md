@@ -10,85 +10,45 @@ The production image is **Ubuntu 26.04 / FFmpeg 8**. MiniDLNA does not
 transcode; FFmpeg is only used to read metadata. The same source is
 compiled in CI against FFmpeg 6, 7, and 8.
 
-## What this fork changes
+## Improvements
 
-### Kodi video dates show as 1905
+### Dates (Kodi 1905)
 
-MiniDLNA stored video `dc:date` as a 19-character local timestamp:
+- Video `dc:date` is stored as `YYYY-MM-DDTHH:MM:SSZ` (UTC) from
+  `st_mtime`, so Kodi’s Platinum `FORMAT_W3C` parser accepts it.
+- SOAP emit rewrites existing rows with no rescan: 19-character
+  `YYYY-MM-DDTHH:MM:SS`, EXIF `YYYY:MM:DD HH:MM:SS`, and a bare year
+  (`1999` → `1999-01-01`).
+- Sidecar Kodi `.nfo` wins when present: `<premiered>`, then `<aired>`,
+  then `<year>`, then MiniDLNA `<capturedate>`.
+- NFO dates apply when the video or `.nfo` is scanned or touched. Soft
+  `-r` does not rewrite unchanged rows; use `-R` or edit the NFO.
+- Refresh or restart Kodi after deploy so it does not keep a cached DIDL.
 
-```
-2024-03-15T14:30:00
-```
+Stock MiniDLNA emitted `2024-03-15T14:30:00` (19 characters, no
+timezone). Kodi rejects that, clears the date, and shows year **1905**.
 
-Kodi’s Platinum / Neptune `FORMAT_W3C` parser accepts either `YYYY-MM-DD`
-(exactly 10 characters) or a datetime **with a timezone** (length ≥ 20,
-e.g. `…SSZ`). A 19-character `YYYY-MM-DDTHH:MM:SS` is rejected. Platinum
-then clears the date, and Kodi treats a leftover year as an OLE serial
-day count from 1899-12-30 — which lands in mid-1905.
+### Library paths
 
-This fork:
-
-- writes new video dates as `YYYY-MM-DDTHH:MM:SSZ` (UTC) from `st_mtime`
-- prefers a sidecar Kodi NFO when present: `<premiered>`, then `<aired>`,
-  then `<year>` (stored as `YYYY-01-01`), then MiniDLNA `<capturedate>`
-- normalizes `dc:date` on SOAP emit, so existing databases are fixed
-  without a rescan (including EXIF `YYYY:MM:DD HH:MM:SS` and a bare year)
-
-NFO dates apply when the video or `.nfo` is scanned or touched. A soft
-`-r` start does not rewrite unchanged rows; use `-R` or edit the NFO.
-
-Restart or refresh Kodi after deploy so it does not keep a cached DIDL.
-
-### Symlink aliases share metadata
-
-A file and every symlink to it stay independently browseable (so
-`genres/animation/Zootopia.mkv` and `kids/Movies/Zootopia.mkv` both
-show up). Metadata, date, and album art are stored once per inode.
-The first path is parsed and thumbnailed; later aliases copy that
-row. Deleting one path does not remove the others, and the shared
-JPEG is removed only when the last alias is gone.
-
-A database version bump (v12) rebuilds the cache so existing libraries
-pick this up.
-
-### Skip folders and unfinished downloads
-
-Stock MiniDLNA has no exclude list. In-progress downloads under the
-media tree get scanned and shown (and often fail) in Kodi.
+- `exclude_dir=` skips a directory and everything under it (absolute
+  prefix or path-component match). Repeat the option. Honored by scan,
+  inotify, and `-r`.
+- Built-in skip, no config: NAS junk folders (`@eaDir`, `#recycle`,
+  `lost+found`, `$RECYCLE.BIN`, `System Volume Information`,
+  `.Trash` / `.Trash-<uid>`, and similar).
+- Built-in skip, no config: unfinished download suffixes (`.part`,
+  `.!qB`, `.!ut`, `.bc!`, `.crdownload`, `.aria2`, `.download`, `.tmp`).
 
 ```conf
-# minidlna.conf — repeat the option to exclude more than one location
 exclude_dir=video/incomplete
 ```
 
-- An absolute path matches that directory and everything under it.
-- A relative value matches as path components anywhere under a
-  `media_dir` (`video/incomplete` matches `/storage/video/incomplete`,
-  but not `incompleteness`).
-- The scanner and inotify both honor the list. A soft rescan (`-r`)
-  drops previously indexed files that now match.
+### Artwork
 
-These are skipped automatically, with no config line:
-
-- NAS / desktop junk folders: `@eaDir`, `#recycle`, `lost+found`,
-  `$RECYCLE.BIN`, `System Volume Information`, `.Trash` / `.Trash-<uid>`,
-  and similar
-- Unfinished download suffixes: `.part`, `.!qB`, `.!ut`, `.bc!`,
-  `.crdownload`, `.aria2`, `.download`, `.tmp`
-
-### Artwork names
-
-Besides the usual `folder.jpg` / `Cover.jpg` / `Movie.cover.jpg`, the
-scanner also looks for Kodi sidecars:
-
-- `Movie-poster.jpg`, `Movie-fanart.jpg` next to `Movie.mkv`
-- `poster.jpg` / `Poster.jpg` in the folder (`album_art_names`)
-
-### Video thumbnails
-
-The image is built with `--enable-thumbnail` (`libffmpegthumbnailer`).
-When no embedded art or sidecar poster / `folder.jpg` exists,
-the scanner can decode a frame and serve it as `upnp:albumArtURI`.
+- Kodi sidecars: `Movie-poster.jpg`, `Movie-fanart.jpg` next to
+  `Movie.mkv`, plus folder `poster.jpg` / `Poster.jpg`.
+- Optional video thumbnails (`libffmpegthumbnailer`): a frame is decoded
+  only when there is no embedded or sidecar art.
 
 ```conf
 enable_thumbnail=yes
@@ -97,39 +57,38 @@ enable_thumbnail=yes
 #enable_thumbnail_filmstrip=no
 ```
 
-Default is off so a first scan does not decode every video. Turning it
-on walks files that still lack art and fills `art_cache`.
+Default is off. The image is built with `--enable-thumbnail`.
 
-Also from Debian 1.3.3:
+### Symlink aliases
 
-- compilation albums no longer spawn one container per artist on inotify
-- SIGHUP reopens the log without tearing down SSDP sockets
-- the non-fork scanner path closes SQLite after a scan
+- Every path stays browseable (`genres/…` and `kids/Movies/…`).
+- Metadata, date, and album art are computed once per inode. Later
+  aliases clone that row.
+- Deleting one path does not remove the others. The shared JPEG is
+  removed only when the last alias is gone.
+- Database v12. Rebuild (`-R` or a new `files.db`) to apply on an
+  existing cache.
 
-### FFmpeg 6 / 7 / 8
+### Debian 1.3.3 scanner fixes
 
-`src/libav.h` uses `ch_layout.nb_channels` on libavutil ≥ 57.28, so the
-tree builds on FFmpeg 6 (deprecated `channels`), 7, and 8.
+- Compilation albums no longer spawn one container per artist on inotify.
+- SIGHUP reopens the log without tearing down SSDP sockets.
+- The non-fork scanner path closes SQLite after a scan.
+- `AC_INIT` reports 1.3.3 (was the leftover 1.1.3).
 
-| Image | libavformat | Role |
-|---|---|---|
-| `ubuntu:24.04` | FFmpeg 6.1 | CI compile |
-| `ubuntu:25.04` | FFmpeg 7.1 | CI compile |
-| `ubuntu:26.04` | FFmpeg 8.0 | CI compile **and** production image |
+### Build and image
 
-GitHub Actions runs this matrix on every push. Locally:
-
-```bash
-./scripts/compile-ffmpeg-matrix.sh
-# or one image:
-./scripts/compile-in-image.sh ubuntu:26.04
-```
+- Compiles on FFmpeg 6, 7, and 8 (`ch_layout.nb_channels` on libavutil
+  ≥ 57.28).
+- Production Docker image: Ubuntu 26.04 / FFmpeg 8, host network (SSDP).
+- CI and `scripts/compile-ffmpeg-matrix.sh` build against
+  `ubuntu:24.04` (FFmpeg 6.1), `25.04` (7.1), and `26.04` (8.0).
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/` | MiniDLNA 1.3.3 plus the patches above |
+| `src/` | MiniDLNA 1.3.3 plus the improvements above |
 | `Dockerfile` | multi-stage Ubuntu 26.04 / FFmpeg 8 build of `src/` |
 | `docker-compose.yaml` | host network (required for SSDP); generic bind mounts |
 | `docker-compose.override.yaml.example` | template for host paths (copy, do not commit) |
@@ -172,6 +131,14 @@ cd src
 ./autogen.sh
 ./configure --prefix=/usr --sysconfdir=/etc --enable-thumbnail
 make -j"$(nproc)"
+```
+
+Compile against FFmpeg 6, 7, and 8:
+
+```bash
+./scripts/compile-ffmpeg-matrix.sh
+# or one image:
+./scripts/compile-in-image.sh ubuntu:26.04
 ```
 
 ## License
