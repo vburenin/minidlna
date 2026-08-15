@@ -289,6 +289,17 @@ db_upgrade(sqlite3 *db)
 		if (ret != SQLITE_OK)
 			return 10;
 	}
+	if (db_vers < 12)
+	{
+		DPRINTF(E_WARN, L_DB_SQL, "Updating DB version to v%d\n", 12);
+		ret = sql_exec(db, "ALTER TABLE DETAILS ADD DEVICE INTEGER");
+		if (ret != SQLITE_OK)
+			return 11;
+		ret = sql_exec(db, "ALTER TABLE DETAILS ADD INODE INTEGER");
+		if (ret != SQLITE_OK)
+			return 11;
+		sql_exec(db, "CREATE INDEX IF NOT EXISTS IDX_DETAILS_INODE ON DETAILS(DEVICE, INODE)");
+	}
 	sql_exec(db, "PRAGMA user_version = %d", DB_VERSION);
 
 	return 0;

@@ -39,6 +39,18 @@ NFO dates apply when the video or `.nfo` is scanned or touched. A soft
 
 Restart or refresh Kodi after deploy so it does not keep a cached DIDL.
 
+### Symlink aliases share metadata
+
+A file and every symlink to it stay independently browseable (so
+`genres/animation/Zootopia.mkv` and `kids/Movies/Zootopia.mkv` both
+show up). Metadata, date, and album art are stored once per inode.
+The first path is parsed and thumbnailed; later aliases copy that
+row. Deleting one path does not remove the others, and the shared
+JPEG is removed only when the last alias is gone.
+
+A database version bump (v12) rebuilds the cache so existing libraries
+pick this up.
+
 ### Skip folders and unfinished downloads
 
 Stock MiniDLNA has no exclude list. In-progress downloads under the

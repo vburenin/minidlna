@@ -53,6 +53,8 @@ monitor_remove_file(const char * path)
 	char *ptr;
 	char **result;
 	int64_t detailID;
+	int64_t art_id = 0;
+	char *art_path = NULL;
 	int rows, playlist;
 
 	if( is_caption(path) )
@@ -112,17 +114,37 @@ monitor_remove_file(const char * path)
 			}
 			sqlite3_free_table(result);
 		}
+		art_id = sql_get_int64_field(db,
+			"SELECT ALBUM_ART from DETAILS where ID = %lld", detailID);
+		if (art_id > 0)
+			art_path = sql_get_text_field(db,
+				"SELECT PATH from ALBUM_ART where ID = %lld", art_id);
 		/* Now delete the actual objects */
 		sql_exec(db, "DELETE from DETAILS where ID = %lld", detailID);
 		sql_exec(db, "DELETE from OBJECTS where DETAIL_ID = %lld", detailID);
 	}
-	snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s", db_path, path);
+	/* Shared thumbs (symlink aliases) stay until the last path is gone. */
+	if (art_id > 0)
+	{
+		int refs = sql_get_int_field(db,
+			"SELECT count(*) from DETAILS where ALBUM_ART = %lld", art_id);
+		if (refs <= 0)
+		{
+			if (art_path)
+				remove(art_path);
+			sql_exec(db, "DELETE from ALBUM_ART where ID = %lld", art_id);
+		}
+	}
+	else
+	{
+		snprintf(art_cache, sizeof(art_cache), "%s/art_cache%s", db_path, path);
 #ifdef THUMBNAIL_CREATION
-	/* Generated thumbs live as art_cache/<path with last 4 chars -> .jpg> */
-	if (is_video(path) && strlen(art_cache) >= 4)
-		strcpy(strchr(art_cache, '\0') - 4, ".jpg");
+		if (is_video(path) && strlen(art_cache) >= 4)
+			strcpy(strchr(art_cache, '\0') - 4, ".jpg");
 #endif
-	remove(art_cache);
+		remove(art_cache);
+	}
+	sqlite3_free(art_path);
 
 	return 0;
 }

@@ -451,11 +451,17 @@ insert_file(const char *name, const char *path, const char *parentID, int object
 	const char *class;
 	char objectID[64];
 	int64_t detailID = 0;
+	int64_t src_id = 0;
 	char base[8];
 	char *typedir_parentID;
 	char *baseid;
 	char *objname;
 	media_types mtype = get_media_type(name);
+	struct stat st;
+	int have_inode = (stat(path, &st) == 0 && S_ISREG(st.st_mode) && st.st_ino);
+
+	if (have_inode)
+		src_id = find_detail_by_inode((int64_t)st.st_dev, (int64_t)st.st_ino);
 
 	if( mtype == TYPE_IMAGE && (types & TYPE_IMAGE) )
 	{
@@ -463,13 +469,23 @@ insert_file(const char *name, const char *path, const char *parentID, int object
 			return -1;
 		strcpy(base, IMAGE_DIR_ID);
 		class = "item.imageItem.photo";
-		detailID = GetImageMetadata(path, name);
+		if (src_id)
+			detailID = clone_detail_for_path(src_id, path,
+				(int64_t)st.st_size, (int64_t)st.st_mtime,
+				(int64_t)st.st_dev, (int64_t)st.st_ino);
+		if (!detailID)
+			detailID = GetImageMetadata(path, name);
 	}
 	else if( mtype == TYPE_VIDEO && (types & TYPE_VIDEO) )
 	{
 		strcpy(base, VIDEO_DIR_ID);
 		class = "item.videoItem";
-		detailID = GetVideoMetadata(path, name);
+		if (src_id)
+			detailID = clone_detail_for_path(src_id, path,
+				(int64_t)st.st_size, (int64_t)st.st_mtime,
+				(int64_t)st.st_dev, (int64_t)st.st_ino);
+		if (!detailID)
+			detailID = GetVideoMetadata(path, name);
 	}
 	else if( mtype == TYPE_PLAYLIST && (types & TYPE_PLAYLIST) )
 	{
@@ -482,13 +498,20 @@ insert_file(const char *name, const char *path, const char *parentID, int object
 	{
 		strcpy(base, MUSIC_DIR_ID);
 		class = "item.audioItem.musicTrack";
-		detailID = GetAudioMetadata(path, name);
+		if (src_id)
+			detailID = clone_detail_for_path(src_id, path,
+				(int64_t)st.st_size, (int64_t)st.st_mtime,
+				(int64_t)st.st_dev, (int64_t)st.st_ino);
+		if (!detailID)
+			detailID = GetAudioMetadata(path, name);
 	}
 	if( !detailID )
 	{
 		DPRINTF(E_WARN, L_SCANNER, "Unsuccessful getting details for %s\n", path);
 		return -1;
 	}
+	if (have_inode)
+		stamp_detail_inode(detailID, (int64_t)st.st_dev, (int64_t)st.st_ino);
 
 	snprintf(objectID, sizeof(objectID), "%s%s$%X", BROWSEDIR_ID, parentID, object);
 	objname = strdup(name);
@@ -610,6 +633,7 @@ CreateDatabase(void)
 	sql_exec(db, "create INDEX IDX_OBJECTS_CLASS ON OBJECTS(CLASS);");
 	sql_exec(db, "create INDEX IDX_DETAILS_PATH ON DETAILS(PATH);");
 	sql_exec(db, "create INDEX IDX_DETAILS_ID ON DETAILS(ID);");
+	sql_exec(db, "create INDEX IDX_DETAILS_INODE ON DETAILS(DEVICE, INODE);");
 	sql_exec(db, "create INDEX IDX_ALBUM_ART ON ALBUM_ART(ID);");
 	sql_exec(db, "create INDEX IDX_SCANNER_OPT ON OBJECTS(PARENT_ID, NAME, OBJECT_ID);");
 

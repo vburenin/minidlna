@@ -100,4 +100,15 @@ GetImageMetadata(const char *path, const char *name);
 int64_t
 GetVideoMetadata(const char *path, const char *name);
 
+int64_t
+find_detail_by_inode(int64_t device, int64_t inode);
+
+int64_t
+clone_detail_for_path(int64_t src_id, const char *path,
+                      int64_t size, int64_t mtime,
+                      int64_t device, int64_t inode);
+
+void
+stamp_detail_inode(int64_t id, int64_t device, int64_t inode);
+
 #endif

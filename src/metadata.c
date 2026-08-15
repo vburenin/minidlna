@@ -1640,3 +1640,59 @@ video_no_dlna:
 
 	return ret;
 }
+
+int64_t
+find_detail_by_inode(int64_t device, int64_t inode)
+{
+	if (!inode)
+		return 0;
+	return sql_get_int64_field(db,
+		"SELECT ID from DETAILS where DEVICE = %lld and INODE = %lld"
+		" and MIME IS NOT NULL limit 1",
+		device, inode);
+}
+
+int64_t
+clone_detail_for_path(int64_t src_id, const char *path,
+                      int64_t size, int64_t mtime,
+                      int64_t device, int64_t inode)
+{
+	int ret;
+	int64_t id;
+
+	if (src_id <= 0 || !path)
+		return 0;
+
+	ret = sql_exec(db,
+		"INSERT into DETAILS"
+		" (PATH, SIZE, TIMESTAMP, TITLE, DURATION, BITRATE, SAMPLERATE,"
+		"  CREATOR, ARTIST, ALBUM, GENRE, COMMENT, CHANNELS, DISC, TRACK,"
+		"  DATE, RESOLUTION, THUMBNAIL, ALBUM_ART, ROTATION, DLNA_PN, MIME,"
+		"  DEVICE, INODE) "
+		"SELECT %Q, %lld, %lld, TITLE, DURATION, BITRATE, SAMPLERATE,"
+		"  CREATOR, ARTIST, ALBUM, GENRE, COMMENT, CHANNELS, DISC, TRACK,"
+		"  DATE, RESOLUTION, THUMBNAIL, ALBUM_ART, ROTATION, DLNA_PN, MIME,"
+		"  %lld, %lld "
+		"FROM DETAILS WHERE ID = %lld",
+		path, size, mtime, device, inode, src_id);
+	if (ret != SQLITE_OK)
+	{
+		DPRINTF(E_ERROR, L_METADATA, "Error cloning details for '%s'!\n", path);
+		return 0;
+	}
+	id = sqlite3_last_insert_rowid(db);
+	DPRINTF(E_DEBUG, L_SCANNER, "Reused metadata for %s [inode %lld]\n",
+	        path, (long long)inode);
+	if (is_video(path))
+		check_for_captions(path, id);
+	return id;
+}
+
+void
+stamp_detail_inode(int64_t id, int64_t device, int64_t inode)
+{
+	if (id <= 0 || !inode)
+		return;
+	sql_exec(db, "UPDATE DETAILS set DEVICE = %lld, INODE = %lld where ID = %lld",
+	         device, inode, id);
+}
