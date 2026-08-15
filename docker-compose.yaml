@@ -7,7 +7,10 @@
 services:
   minidlna:
     container_name: minidlna
-    build: .
+    build:
+      context: .
+      args:
+        MINIDLNA_UID: ${MINIDLNA_UID:-}
     image: minidlna:local
     restart: always
     network_mode: host

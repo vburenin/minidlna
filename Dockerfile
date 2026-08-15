@@ -35,8 +35,9 @@ RUN ./configure --prefix=/usr --sysconfdir=/etc \
 
 FROM ubuntu:26.04
 
+ARG MINIDLNA_UID=
 ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=America/Los_Angeles
+    TZ=UTC
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libavformat62 \
@@ -54,7 +55,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         tzdata \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
-    && useradd --system --no-create-home --uid 114 --user-group minidlna \
+    && if [ -n "$MINIDLNA_UID" ]; then \
+           useradd --system --no-create-home --uid "$MINIDLNA_UID" --user-group minidlna; \
+       else \
+           useradd --system --no-create-home --user-group minidlna; \
+       fi \
     && mkdir -p /var/cache/minidlna /var/log/minidlna /storage/video \
     && chown -R minidlna:minidlna /var/cache/minidlna /var/log/minidlna \
     && rm -rf /var/lib/apt/lists/*
@@ -67,5 +72,5 @@ EXPOSE 8200/tcp 1900/udp
 
 # Start as root so minidlnad can bind UDP/1900, then it drops to user=minidlna.
 # -S: stay in the foreground (container PID 1).
-# -r: soft non-destructive DB rebuild on start (same as the host unit).
+# -r: soft non-destructive DB rebuild on start.
 CMD ["/usr/sbin/minidlnad", "-f", "/etc/minidlna.conf", "-S", "-r"]
