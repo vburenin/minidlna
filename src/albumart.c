@@ -313,6 +313,23 @@ check_for_album_file(const char *path)
 			}
 		}
 	}
+	/* Kodi sidecars: Movie-poster.jpg, Movie-fanart.jpg */
+	if( ret != 0 )
+	{
+		char base[MAXPATHLEN];
+
+		strncpyt(base, path, sizeof(base));
+		p = strrchr(base, '.');
+		if( p )
+			*p = '\0';
+		snprintf(file, sizeof(file), "%s-poster.jpg", base);
+		ret = access(file, R_OK);
+		if( ret != 0 )
+		{
+			snprintf(file, sizeof(file), "%s-fanart.jpg", base);
+			ret = access(file, R_OK);
+		}
+	}
 	if( ret == 0 )
 	{
 		if( art_cache_exists(file, &art_file) )

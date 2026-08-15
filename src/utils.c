@@ -741,6 +741,18 @@ w3c_normalize_date(const char *date, char *buf, size_t buflen)
 
 	n = strlen(date);
 
+	/* Bare year from Kodi <year>1999</year> */
+	if( n == 4 && date[0] >= '1' && date[0] <= '2' &&
+	    isdigit((unsigned char)date[1]) && isdigit((unsigned char)date[2]) &&
+	    isdigit((unsigned char)date[3]) )
+	{
+		if( buflen < 11 )
+			return;
+		memcpy(buf, date, 4);
+		memcpy(buf + 4, "-01-01", 7);
+		return;
+	}
+
 	/* YYYY-MM-DDTHH:MM:SS (no timezone) */
 	if( n == 19 && date[4] == '-' && date[7] == '-' &&
 	    (date[10] == 'T' || date[10] == ' ') &&

@@ -29,8 +29,13 @@ day count from 1899-12-30 — which lands in mid-1905.
 This fork:
 
 - writes new video dates as `YYYY-MM-DDTHH:MM:SSZ` (UTC) from `st_mtime`
+- prefers a sidecar Kodi NFO when present: `<premiered>`, then `<aired>`,
+  then `<year>` (stored as `YYYY-01-01`), then MiniDLNA `<capturedate>`
 - normalizes `dc:date` on SOAP emit, so existing databases are fixed
-  without a rescan (including EXIF `YYYY:MM:DD HH:MM:SS`)
+  without a rescan (including EXIF `YYYY:MM:DD HH:MM:SS` and a bare year)
+
+NFO dates apply when the video or `.nfo` is scanned or touched. A soft
+`-r` start does not rewrite unchanged rows; use `-R` or edit the NFO.
 
 Restart or refresh Kodi after deploy so it does not keep a cached DIDL.
 
@@ -59,10 +64,18 @@ These are skipped automatically, with no config line:
 - Unfinished download suffixes: `.part`, `.!qB`, `.!ut`, `.bc!`,
   `.crdownload`, `.aria2`, `.download`, `.tmp`
 
+### Artwork names
+
+Besides the usual `folder.jpg` / `Cover.jpg` / `Movie.cover.jpg`, the
+scanner also looks for Kodi sidecars:
+
+- `Movie-poster.jpg`, `Movie-fanart.jpg` next to `Movie.mkv`
+- `poster.jpg` / `Poster.jpg` in the folder (`album_art_names`)
+
 ### Video thumbnails
 
 The image is built with `--enable-thumbnail` (`libffmpegthumbnailer`).
-When no embedded art or sidecar `folder.jpg` / `*.cover.jpg` exists,
+When no embedded art or sidecar poster / `folder.jpg` exists,
 the scanner can decode a frame and serve it as `upnp:albumArtURI`.
 
 ```conf

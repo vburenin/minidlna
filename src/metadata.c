@@ -157,6 +157,26 @@ check_for_captions(const char *path, int64_t detailID)
 }
 
 static void
+nfo_set_date(metadata_t *m, const char *raw)
+{
+	char *unesc, *esc;
+	char norm[32];
+
+	unesc = unescape_tag(raw, 1);
+	if (!unesc)
+		return;
+	w3c_normalize_date(unesc, norm, sizeof(norm));
+	free(unesc);
+	if (!norm[0])
+		return;
+	esc = escape_tag(norm, 1);
+	if (!esc)
+		return;
+	free(m->date);
+	m->date = esc;
+}
+
+static void
 parse_nfo(const char *path, metadata_t *m)
 {
 	FILE *nfo;
@@ -211,13 +231,16 @@ parse_nfo(const char *path, metadata_t *m)
 		free(esc_tag);
 	}
 
-	val = GetValueFromNameValueList(&xml, "capturedate");
+	/* Kodi: premiered / aired / year. MiniDLNA: capturedate. */
+	val = GetValueFromNameValueList(&xml, "premiered");
+	if (!val)
+		val = GetValueFromNameValueList(&xml, "aired");
+	if (!val)
+		val = GetValueFromNameValueList(&xml, "year");
+	if (!val)
+		val = GetValueFromNameValueList(&xml, "capturedate");
 	if (val)
-	{
-		char *esc_tag = unescape_tag(val, 1);
-		m->date = escape_tag(esc_tag, 1);
-		free(esc_tag);
-	}
+		nfo_set_date(m, val);
 
 	val = GetValueFromNameValueList(&xml, "genre");
 	if (val)
